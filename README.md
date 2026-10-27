@@ -12,7 +12,7 @@ Détox a la forme d'Instagram (fil, stories, reels, messages, recherche, profil)
 
 - **App** : Next.js 16 (App Router), React, TypeScript ; l'API vit dans `app/api/`
 - **Médias** : UploadThing via `files-sdk` (route `/api/files`)
-- **Base** (prévu) : MongoDB + Mongoose
+- **Base** : MongoDB Atlas + Mongoose (`lib/db/`)
 - **Sécurité** (prévu) : bcrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
 - **Qualité** : ESLint, Vitest + Supertest ; Swagger/OpenAPI prévu
 - **Commits** : [Conventional Commits](https://www.conventionalcommits.org/fr/) (`feat:`, `fix:`, `test:`…), vérifiés par commitlint (hook `commit-msg` + CI)
@@ -54,6 +54,8 @@ Le build passe sans ces variables. En production, `/api/files` renvoie une erreu
 | `pnpm lint` | ESLint |
 | `pnpm typecheck` | Génère les types des routes Next.js, puis lance `tsc` |
 | `pnpm test` | Tests Vitest |
+| `pnpm db:indexes` | Crée les index MongoDB (voir [docs/db](docs/db/README.md)) |
+| `pnpm db:seed` | Remplit L'Épicerie |
 
 La CI lance `lint`, `typecheck`, `test` et `build` sur chaque PR, et vérifie les messages de commit avec commitlint.
 
@@ -82,6 +84,10 @@ Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadT
 - Identifiant public `id` (jamais `_id`) ; `ownerId` déduit du JWT ; listes en `{"items":[...]}`.
 - `PATCH` partiel, champs inconnus refusés ; id mal formé → 400.
 
+## Base de données
+
+Mise en route Atlas, collections et règles d'usage : [docs/db/README.md](docs/db/README.md). Modèle MERISE (MCD, MLD, MPD) : [docs/db/merise.md](docs/db/merise.md).
+
 ## Vocabulaire
 
 | Terme | Sens dans l'app |
@@ -96,7 +102,7 @@ Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadT
 
 ## Économie de points
 
-Tout est calculé côté serveur : chaque gain est un `PointEvent`, chaque débit un `$inc` atomique avec condition de solde suffisant.
+Tout est calculé côté serveur : chaque gain ou débit écrit un `PointEvent` et le solde dans la même transaction ; un débit exige un solde suffisant.
 
 | Action | Gain |
 |---|---|
