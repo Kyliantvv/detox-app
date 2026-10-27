@@ -6,9 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:seed": "tsx --env-file-if-exists=.env.local scripts/seed.mts",
+    "db:indexes": "tsx --env-file-if-exists=.env.local scripts/indexes.mts"
+  },
+  "engines": {
+    "node": ">=22.9"
   },
   "dependencies": {
+    "mongoose": "9.11.4",
     "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0"
@@ -21,6 +27,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   },
   "packageManager": "pnpm@10.26.0"

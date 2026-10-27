@@ -44,6 +44,10 @@ docker compose up --build
 - Identifiant public `id` (jamais `_id`) ; `ownerId` déduit du JWT ; listes en `{"items":[...]}`.
 - `PATCH` partiel, champs inconnus refusés ; id mal formé → 400.
 
+## Base de données
+
+Mise en route Atlas, collections et règles d'usage : [docs/db/README.md](docs/db/README.md). Modèle MERISE (MCD, MLD, MPD) : [docs/db/merise.md](docs/db/merise.md).
+
 ## Vocabulaire
 
 | Terme | Sens dans l'app |
@@ -58,7 +62,7 @@ docker compose up --build
 
 ## Économie de points
 
-Tout est calculé côté serveur : chaque gain est un `PointEvent`, chaque débit un `$inc` atomique avec condition de solde suffisant.
+Tout est calculé côté serveur : chaque gain ou débit écrit un `PointEvent` et le solde dans la même transaction ; un débit exige un solde suffisant.
 
 | Action | Gain |
 |---|---|
