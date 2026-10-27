@@ -1,0 +1,459 @@
+// Schéma de la base MongoDB. `pnpm db:indexes` crée les collections et les
+// index déclarés ici, puis ceux que Prisma ne sait pas décrire (index uniques
+// partiels, TTL) : voir lib/db/indexes.ts.
+//
+// Les collections et les noms d'index gardent ceux de Mongoose (`users`,
+// `authorId_1_createdAt_-1`…) : une base déjà remplie reste compatible.
+//
+// Prisma ne valide ni longueur ni minimum : lib/db/validation.ts s'en charge.
+// Les relations Prisma sont émulées sur MongoDB : `onDelete: Cascade`
+// supprime les documents liés, sans toucher aux compteurs dénormalisés.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGODB_URI")
+}
+
+enum AvatarColor {
+  pink
+  yellow
+  green
+  purple
+  grey
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum PostType {
+  photo
+  reel
+}
+
+enum Visibility {
+  public
+  closeFriends
+}
+
+enum DrawKind {
+  scratch
+  lootbox
+  bonus
+}
+
+enum DrawStatus {
+  open
+  done
+}
+
+enum OrderStatus {
+  preparing
+  in_transit
+}
+
+enum PointEventType {
+  flow_page
+  like
+  comment
+  repost
+  daily_login
+  bonus
+  combo
+  shop_purchase
+  skill_purchase
+  draw_cost
+  draw_payout
+}
+
+// order : fausse commande ; scratch / lootbox : crée un Draw.
+enum ShopItemKind {
+  order
+  scratch
+  lootbox
+}
+
+// Les 10 compétences de Clairvoyance ; leur prix est dans SKILLS (lib/db/skills.ts).
+enum Skill {
+  last_seen
+  balance
+  streak
+  scroll_time
+  recent_orders
+  profile_visits
+  best_gain
+  peak_hours
+  close_circle
+  full_dossier
+}
+
+type Streak {
+  current      Int     @default(0)
+  best         Int     @default(0)
+  lastLoginDay String? // YYYY-MM-DD, heure de Paris
+}
+
+type DayCount {
+  day   String
+  count Int    @default(0)
+}
+
+type Combo {
+  count        Int       @default(0)
+  lastActionAt DateTime?
+}
+
+// Données privées : jamais dans le JSON public (voir toPublicUser), puisque
+// Clairvoyance vend le solde, la série et la dernière connexion.
+model User {
+  id             String      @id @default(auto()) @map("_id") @db.ObjectId
+  email          String      @unique(map: "email_1")
+  username       String      @unique(map: "username_1")
+  // Omis de toutes les lectures (lib/db/client.ts) : `omit: { passwordHash: false }` pour le lire.
+  passwordHash   String
+  displayName    String?
+  bio            String      @default("")
+  avatarPath     String?
+  avatarColor    AvatarColor @default(green)
+  role           Role        @default(user)
+  // Solde dépensable. Ne modifier que via lib/db/points.ts.
+  points         Int         @default(0)
+  // Cumul des gains, ne baisse jamais : sert au niveau.
+  totalEarned    Int         @default(0)
+  streak         Streak?
+  // Posts vus dans le Flow, au total (coffre) et aujourd'hui. Ne modifier que
+  // via lib/db/activity.ts.
+  postsSeen      Int         @default(0)
+  postsSeenToday DayCount?
+  // Actions enchaînées sans pause, pour le multiplicateur de combo.
+  combo          Combo?
+  // Temps passé dans l'app, pour le Bilan.
+  timeSpentSec   Float       @default(0)
+  lastActiveAt   DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  posts           Post[]
+  likes           Like[]
+  reposts         Repost[]
+  saves           Save[]
+  comments        Comment[]
+  following       Follow[]        @relation("follower")
+  followers       Follow[]        @relation("following")
+  closeFriends    CloseFriend[]   @relation("owner")
+  closeFriendOf   CloseFriend[]   @relation("friend")
+  blocking        Block[]         @relation("blocker")
+  blockedBy       Block[]         @relation("blocked")
+  profileViews    ProfileView[]   @relation("viewer")
+  profileVisitors ProfileView[]   @relation("profile")
+  stories         Story[]
+  messages        Message[]
+  pointEvents     PointEvent[]
+  orders          Order[]
+  skillPurchases  SkillPurchase[] @relation("buyer")
+  skillTargetedBy SkillPurchase[] @relation("target")
+  draws           Draw[]
+
+  @@map("users")
+}
+
+model Post {
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
+  authorId      String     @db.ObjectId
+  author        User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  type          PostType
+  mediaPath     String // fichier dans uploads/
+  mediaMime     String
+  caption       String     @default("")
+  location      String?
+  tags          String[] // filtres de Recherche (voyage…)
+  visibility    Visibility @default(public)
+  // Compteurs dénormalisés : ne modifier que via lib/db/social.ts.
+  likesCount    Int        @default(0)
+  commentsCount Int        @default(0)
+  repostsCount  Int        @default(0)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  likes    Like[]
+  reposts  Repost[]
+  saves    Save[]
+  comments Comment[]
+
+  @@index([authorId, createdAt(sort: Desc)], map: "authorId_1_createdAt_-1")
+  @@index([createdAt(sort: Desc)], map: "createdAt_-1")
+  @@index([tags, createdAt(sort: Desc)], map: "tags_1_createdAt_-1")
+  @@map("posts")
+}
+
+// Bonne dose.
+model Like {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String   @db.ObjectId
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId], map: "userId_1_postId_1")
+  @@index([postId], map: "postId_1")
+  @@map("likes")
+}
+
+// Republication d'un post (+5 pts, comme un commentaire).
+model Repost {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String   @db.ObjectId
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId], map: "userId_1_postId_1")
+  @@index([postId], map: "postId_1")
+  @@map("reposts")
+}
+
+// Signet : onglet « enregistrés » du profil.
+model Save {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String   @db.ObjectId
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId], map: "userId_1_postId_1")
+  @@index([userId, createdAt(sort: Desc)], map: "userId_1_createdAt_-1")
+  @@map("saves")
+}
+
+model Comment {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  postId    String   @db.ObjectId
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String   @db.ObjectId
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId, createdAt], map: "postId_1_createdAt_1")
+  @@map("comments")
+}
+
+// Mon cercle. Le cercle proche est dans CloseFriend.
+model Follow {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  followerId  String   @db.ObjectId
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String   @db.ObjectId
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId], map: "followerId_1_followingId_1")
+  @@index([followingId], map: "followingId_1")
+  @@map("follows")
+}
+
+// Cercle proche de `ownerId` : décide qui voit ses posts `closeFriends`.
+// Séparé de Follow : la liste appartient à son propriétaire, et un ami proche
+// n'a pas à être suivi.
+model CloseFriend {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId   String   @db.ObjectId
+  owner     User     @relation("owner", fields: [ownerId], references: [id], onDelete: Cascade)
+  friendId  String   @db.ObjectId
+  friend    User     @relation("friend", fields: [friendId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([ownerId, friendId], map: "ownerId_1_friendId_1")
+  @@map("closefriends")
+}
+
+model Block {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  blockerId String   @db.ObjectId
+  blocker   User     @relation("blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String   @db.ObjectId
+  blocked   User     @relation("blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId], map: "blockerId_1_blockedId_1")
+  @@index([blockedId], map: "blockedId_1")
+  @@map("blocks")
+}
+
+// Alimente la compétence Clairvoyance « Visites de profil ».
+model ProfileView {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  viewerId  String   @db.ObjectId
+  viewer    User     @relation("viewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  profileId String   @db.ObjectId
+  profile   User     @relation("profile", fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([profileId, createdAt(sort: Desc)], map: "profileId_1_createdAt_-1")
+  @@map("profileviews")
+}
+
+// Instant. Mongo supprime le document à `expiresAt` (index TTL, lib/db/indexes.ts).
+// `expiresAt` par défaut à +24 h : posé par lib/db/validation.ts.
+model Story {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  authorId  String   @db.ObjectId
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  mediaPath String
+  mediaMime String
+  viewerIds String[] @db.ObjectId
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([authorId, createdAt(sort: Desc)], map: "authorId_1_createdAt_-1")
+  @@map("stories")
+}
+
+// Créer avec findOrCreateConversation : une seule conversation par paire.
+model Conversation {
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  participantIds     String[]  @db.ObjectId
+  // Ids triés et joints : une seule conversation par paire.
+  pairKey            String    @unique(map: "pairKey_1")
+  lastMessageAt      DateTime?
+  lastMessagePreview String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  messages Message[]
+
+  @@index([participantIds, lastMessageAt(sort: Desc)], map: "participantIds_1_lastMessageAt_-1")
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String       @db.ObjectId
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  text           String
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt(sort: Desc)], map: "conversationId_1_createdAt_-1")
+  @@map("messages")
+}
+
+// Journal de chaque mouvement de points, écrit par lib/db/points.ts uniquement.
+// Sert aussi à l'historique et à plusieurs compétences (temps de scroll,
+// plus gros gain, heures de pointe).
+// Index uniques partiels (une page de Flow, une connexion par jour) : lib/db/indexes.ts.
+model PointEvent {
+  id        String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String         @db.ObjectId
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int // positif = gain, négatif = débit
+  type      PointEventType
+  // Obligatoire pour flow_page (vérifié par creditPoints).
+  flowPage  Int?
+  refId     String?        @db.ObjectId // post, commande, compétence ou tirage concerné
+  day       String // parisDay() de la création
+  createdAt DateTime       @default(now())
+
+  @@index([userId, createdAt(sort: Desc)], map: "userId_1_createdAt_-1")
+  @@index([userId, day, type], map: "userId_1_day_1_type_1")
+  @@map("pointevents")
+}
+
+// Article de L'Épicerie. Rempli par `pnpm db:seed`.
+model ShopItem {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  slug        String       @unique(map: "slug_1")
+  name        String
+  description String
+  icon        String
+  price       Int
+  kind        ShopItemKind
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  orders Order[]
+  prizes Draw[]
+
+  @@map("shopitems")
+}
+
+type OrderItem {
+  name  String
+  price Int
+}
+
+// Fausse commande : rien n'est jamais livré.
+model Order {
+  id             String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String      @db.ObjectId
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId         String      @db.ObjectId
+  shopItem       ShopItem    @relation(fields: [itemId], references: [id])
+  // Copie au moment de l'achat, au cas où l'article change de prix.
+  item           OrderItem
+  quantity       Int         @default(1)
+  fakeAddress    String
+  trackingNumber String      @unique(map: "trackingNumber_1")
+  status         OrderStatus @default(in_transit)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([userId, createdAt(sort: Desc)], map: "userId_1_createdAt_-1")
+  @@map("orders")
+}
+
+// Achat unique par cible ; la cible n'est jamais notifiée. Créer avec buySkill.
+model SkillPurchase {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  buyerId   String   @db.ObjectId
+  buyer     User     @relation("buyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  targetId  String   @db.ObjectId
+  target    User     @relation("target", fields: [targetId], references: [id], onDelete: Cascade)
+  skill     Skill
+  // Toujours le prix de SKILLS, fixé par buySkill : l'appelant ne le choisit pas.
+  price     Int
+  createdAt DateTime @default(now())
+
+  @@unique([buyerId, targetId, skill], map: "buyerId_1_targetId_1_skill_1")
+  @@map("skillpurchases")
+}
+
+type DrawCell {
+  value    Int
+  revealed Boolean @default(false)
+}
+
+// Tirage serveur : ticket à gratter, loot box ou bonus aléatoire.
+// Les valeurs sont tirées à la création ; le client ne fait que révéler.
+// toDrawJSON masque les cases non grattées, le gain et l'objet tant que le tirage est ouvert.
+// Nommé DiceRoll dans le dossier (route /api/dice).
+model Draw {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String     @db.ObjectId
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind        DrawKind
+  cost        Int        @default(0)
+  cells       DrawCell[]
+  payout      Int        @default(0)
+  // Loot box : objet gagné à la place (ou en plus) des points.
+  prizeItemId String?    @db.ObjectId
+  prizeItem   ShopItem?  @relation(fields: [prizeItemId], references: [id], onDelete: SetNull)
+  status      DrawStatus @default(open)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([userId, status, createdAt(sort: Desc)], map: "userId_1_status_1_createdAt_-1")
+  @@map("draws")
+}
