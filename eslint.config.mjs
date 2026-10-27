@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import vitest from "@vitest/eslint-plugin";
+import reactYouMightNotNeedAnEffect from "eslint-plugin-react-you-might-not-need-an-effect";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -22,6 +23,10 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-misused-promises": "error",
     },
   },
+  // Flags effects that should be render-time code, event handlers, or a
+  // key reset (react.dev/learn/you-might-not-need-an-effect). Errors, not
+  // warnings, so CI enforces them.
+  reactYouMightNotNeedAnEffect.configs.strict,
   {
     files: ["**/*.test.ts", "**/*.test.tsx"],
     ...vitest.configs.recommended,
