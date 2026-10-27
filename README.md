@@ -15,6 +15,7 @@ Détox a la forme d'Instagram (fil, stories, reels, messages, recherche, profil)
 - **Base** : MongoDB + Mongoose ; médias sur disque via Multer (`uploads/`)
 - **Sécurité** : bcrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
 - **Qualité** : ESLint, Vitest + Supertest, Swagger/OpenAPI
+- **Commits** : [Conventional Commits](https://www.conventionalcommits.org/fr/) (`feat:`, `fix:`, `test:`…), vérifiés par commitlint (hook `commit-msg` + CI)
 - **Lancement** : monorepo `frontend/` + `backend/`, `docker compose up` (mongo, backend, frontend)
 
 **Pourquoi Vitest plutôt que Jest**
