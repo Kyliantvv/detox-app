@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createFiles } from "files-sdk";
 import { createFilesClient } from "files-sdk/client";
 import { memory } from "files-sdk/memory";
@@ -11,9 +11,9 @@ const setup = () => {
   const router = createUploadRouter(files);
 
   // Node server around the Web-standard handler, for Supertest.
-  const server = createServer(async (req, res) => {
+  const handle = async (req: IncomingMessage, res: ServerResponse) => {
     const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(chunk);
+    for await (const chunk of req) chunks.push(chunk as Buffer);
     const hasBody = req.method !== "GET" && req.method !== "HEAD";
     const response = await router.handle(
       new Request(`http://${req.headers.host}${req.url}`, {
@@ -24,6 +24,11 @@ const setup = () => {
     );
     res.writeHead(response.status, Object.fromEntries(response.headers));
     res.end(Buffer.from(await response.arrayBuffer()));
+  };
+  const server = createServer((req, res) => {
+    handle(req, res).catch((error: unknown) => {
+      res.writeHead(500).end(String(error));
+    });
   });
 
   // The upload protocol is three requests; let the SDK client drive it.
