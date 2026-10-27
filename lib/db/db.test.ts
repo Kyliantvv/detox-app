@@ -17,7 +17,8 @@ describe.skipIf(!uri)("lib/db sur MongoDB", () => {
     lib = await import(".");
     await lib.db.$runCommandRaw({ dropDatabase: 1 });
     execFileSync("pnpm", ["exec", "prisma", "db", "push", "--skip-generate"], { env: process.env, stdio: "ignore" });
-    expect(await lib.ensureIndexes()).toEqual([]);
+    const failures = await lib.ensureIndexes();
+    if (failures.length) throw new Error(JSON.stringify(failures));
   }, 60_000);
 
   afterAll(async () => {
