@@ -14,8 +14,14 @@ Détox a la forme d'Instagram (fil, stories, reels, messages, recherche, profil)
 - **Back** : Node.js + Express (routes / contrôleurs / services / modèles)
 - **Base** : MongoDB + Mongoose ; médias sur disque via Multer (`uploads/`)
 - **Sécurité** : bcrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
-- **Qualité** : ESLint, Jest + Supertest, Swagger/OpenAPI
+- **Qualité** : ESLint, Vitest + Supertest, Swagger/OpenAPI
 - **Lancement** : monorepo `frontend/` + `backend/`, `docker compose up` (mongo, backend, frontend)
+
+**Pourquoi Vitest plutôt que Jest**
+
+- **Compatibilité ESM** : `files-sdk` (entre autres) est publié uniquement en ESM. Jest fonctionne mal avec l'ESM; Vitest fonctionne avec l'ESM nativement.
+- **TypeScript sans configuration** : pas de Babel, `ts-jest` ni `ts-node`, et aucun fichier de config.
+- **Même API que Jest** : `describe`, `it`, `expect` et les mêmes matchers, donc rien à réapprendre. Supertest fonctionne pareil.
 
 ## Lancer le projet
 
