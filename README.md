@@ -30,7 +30,7 @@ Prérequis : Node.js 22 et pnpm 10.
 
 ```bash
 pnpm install
-cp .env.example .env.local   # puis renseigner les variables ci-dessous
+cp .env.example .env   # puis renseigner les variables ci-dessous
 pnpm dev
 ```
 

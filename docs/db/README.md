@@ -10,7 +10,7 @@ Prisma 7 ne gère pas encore MongoDB : rester sur la 6.19 tant que ce n'est pas 
 
 ```bash
 docker compose up -d --wait   # MongoDB 7 en replica set sur le port 27017 (MONGO_PORT pour en changer)
-echo 'MONGODB_URI=mongodb://localhost:27017/detox?directConnection=true' >> .env.local
+echo 'MONGODB_URI=mongodb://localhost:27017/detox?directConnection=true' >> .env.local   # l'emporte sur .env
 pnpm db:indexes
 pnpm db:seed
 ```
@@ -19,7 +19,7 @@ pnpm db:seed
 
 1. Dans Atlas : créer un cluster (le palier gratuit M0 suffit), un utilisateur de base, et autoriser son IP dans *Network Access*.
 2. *Database > Connect > Drivers* : copier la chaîne de connexion.
-3. `cp .env.example .env.local`, puis coller la chaîne dans `MONGODB_URI` en ajoutant le nom de base (`/detox`) avant le `?`.
+3. `cp .env.example .env`, puis coller la chaîne dans `MONGODB_URI` en ajoutant le nom de base (`/detox`) avant le `?`.
 4. Créer les index puis remplir la boutique :
 
    ```bash
