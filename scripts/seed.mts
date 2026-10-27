@@ -1,15 +1,19 @@
 import { parseArgs } from "node:util";
 import { db, Prisma, type ShopItemKind } from "../lib/db";
-import { createRng, fakePosts, fakeUsers, SEED_EMAIL_DOMAIN, SEED_PASSWORD } from "./seed-data";
+import { createRng, fakeSeed, SEED_EMAIL_DOMAIN, SEED_PASSWORD } from "./seed-data";
 
-// pnpm db:seed [--users 100] [--posts 500] [--seed 42]
-// Remplit L'Épicerie, puis remplace les comptes de seed (@seed.detox.local)
-// et leurs posts. Les autres comptes ne sont pas touchés.
+// pnpm db:seed [--users 100] [--posts 500] [--follows 20] [--likes 10] [--seed 42]
+// Remplit L'Épicerie, puis remplace les comptes de seed (@seed.detox.local),
+// leurs posts, abonnements, likes et historiques de points. Les autres comptes
+// ne sont pas touchés.
 
 const { values } = parseArgs({
   options: {
     users: { type: "string", default: "100" },
     posts: { type: "string", default: "500" },
+    // Moyennes : abonnements par utilisateur, likes par post.
+    follows: { type: "string", default: "20" },
+    likes: { type: "string", default: "10" },
     seed: { type: "string", default: "42" },
   },
 });
@@ -72,13 +76,22 @@ try {
   const removed = await purge("User", oldIds);
   if (removed) console.log(`${removed} anciens comptes de seed supprimés.`);
 
-  const rng = createRng(count("seed", values.seed));
-  const now = new Date();
-  await inChunks(fakeUsers(userCount, rng, now), (data) => db.user.createMany({ data }));
-  const authorIds = (await db.user.findMany({ where: seedUsers, select: { id: true } })).map((u) => u.id);
-  await inChunks(fakePosts(postCount, authorIds, rng, now), (data) => db.post.createMany({ data }));
+  const data = fakeSeed(
+    { users: userCount, posts: postCount, followsPerUser: count("follows", values.follows), likesPerPost: count("likes", values.likes) },
+    createRng(count("seed", values.seed)),
+  );
+  // Ni points ni compteurs écrits à la main : `fakeSeed` les calcule à partir des likes et du journal de points.
+  await inChunks(data.users, (rows) => db.user.createMany({ data: rows }));
+  await inChunks(data.posts, (rows) => db.post.createMany({ data: rows }));
+  await inChunks(data.follows, (rows) => db.follow.createMany({ data: rows }));
+  await inChunks(data.likes, (rows) => db.like.createMany({ data: rows }));
+  await inChunks(data.pointEvents, (rows) => db.pointEvent.createMany({ data: rows }));
 
-  console.log(`${userCount} utilisateurs et ${postCount} posts créés (mot de passe : ${SEED_PASSWORD}).`);
+  const points = data.users.reduce((sum, u) => sum + (u.points ?? 0), 0);
+  console.log(
+    `${data.users.length} utilisateurs, ${data.posts.length} posts, ${data.follows.length} abonnements, ${data.likes.length} likes ` +
+      `et ${points} points (${data.pointEvents.length} gains) créés. Mot de passe : ${SEED_PASSWORD}.`,
+  );
 } finally {
   await db.$disconnect();
 }

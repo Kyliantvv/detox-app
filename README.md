@@ -55,7 +55,7 @@ Le build passe sans ces variables. En production, `/api/files` renvoie une erreu
 | `pnpm typecheck` | Génère les types des routes Next.js, puis lance `tsc` |
 | `pnpm test` | Tests Vitest |
 | `pnpm db:indexes` | Crée les collections et index MongoDB (voir [docs/db](docs/db/README.md)) |
-| `pnpm db:seed` | Remplit L'Épicerie et crée des comptes de démo (`--users 100 --posts 500` par défaut) |
+| `pnpm db:seed` | Remplit L'Épicerie et crée des comptes de démo avec abonnements, likes et soldes (`--users 100 --posts 500 --follows 20 --likes 10` par défaut) |
 
 La CI lance `lint`, `typecheck`, `test` et `build` sur chaque PR, et vérifie les messages de commit avec commitlint.
 

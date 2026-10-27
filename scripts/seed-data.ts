@@ -1,7 +1,8 @@
 import type { AvatarColor, PostType, Prisma, Visibility } from "@prisma/client";
+import { parisDay } from "../lib/db/time";
 
-// Faux utilisateurs et faux posts pour `pnpm db:seed`. Pur et déterministe :
-// une même graine donne les mêmes données.
+// Fausses données pour `pnpm db:seed`. Pur et déterministe : une même graine
+// (et un même `now`) donne les mêmes données.
 
 /** Domaine des comptes de seed : le seed supprime ces comptes, et eux seuls, avant de les recréer. */
 export const SEED_EMAIL_DOMAIN = "seed.detox.local";
@@ -56,36 +57,64 @@ export function createRng(seed: number) {
 }
 export type Rng = ReturnType<typeof createRng>;
 
+/** ObjectId dont l'horodatage est `date`, le reste tiré de `rng`. */
+function objectId(date: Date, rng: Rng) {
+  const time = Math.floor(date.getTime() / 1000).toString(16).padStart(8, "0");
+  return time + Array.from({ length: 16 }, () => rng.int(16).toString(16)).join("");
+}
+
+/** Date au hasard entre `from` et `to`. */
+const between = (from: Date, to: Date, rng: Rng) => new Date(from.getTime() + rng.int(to.getTime() - from.getTime() + 1));
+
+/** `k` éléments distincts de `list`, sans `except`. */
+function sample<T>(list: readonly T[], k: number, rng: Rng, except?: T) {
+  const max = list.length - (except !== undefined && list.includes(except) ? 1 : 0);
+  const out = new Set<T>();
+  while (out.size < Math.min(k, max)) {
+    const item = rng.pick(list);
+    if (item !== except) out.add(item);
+  }
+  return [...out];
+}
+
 /** Sans accents ni caractères spéciaux, pour les pseudos et les e-mails. */
 const slug = (s: string) => s.normalize("NFD").replace(/[^a-zA-Z]/g, "").toLowerCase();
 
-export function fakeUsers(count: number, rng: Rng, now = new Date()): Prisma.UserCreateManyInput[] {
+type WithId<T> = T & { id: string; createdAt: Date };
+export type FakeUser = WithId<Prisma.UserCreateManyInput>;
+export type FakePost = WithId<Prisma.PostCreateManyInput>;
+
+export function fakeUsers(count: number, rng: Rng, now = new Date()): FakeUser[] {
   return Array.from({ length: count }, (_, i) => {
     const first = rng.pick(FIRST_NAMES);
     const last = rng.pick(LAST_NAMES);
     // L'index garantit l'unicité ; le pseudo reste sous les 30 caractères.
     const username = `${slug(first)}.${slug(last)}${i + 1}`;
+    // Inscrits entre 60 et 120 jours avant `now`.
+    const createdAt = new Date(now.getTime() - (60 + rng.int(60)) * DAY_MS);
     return {
+      id: objectId(createdAt, rng),
       email: `${username}@${SEED_EMAIL_DOMAIN}`,
       username,
       passwordHash: SEED_PASSWORD_HASH,
       displayName: `${first} ${last}`,
       bio: rng.pick(BIOS),
       avatarColor: rng.pick(AVATAR_COLORS),
-      // Inscrits entre 60 et 120 jours avant `now`.
-      createdAt: new Date(now.getTime() - (60 + rng.int(60)) * DAY_MS),
+      createdAt,
     };
   });
 }
 
 /** Posts répartis au hasard entre `authorIds`, publiés sur les 60 derniers jours. */
-export function fakePosts(count: number, authorIds: string[], rng: Rng, now = new Date()): Prisma.PostCreateManyInput[] {
+export function fakePosts(count: number, authorIds: string[], rng: Rng, now = new Date()): FakePost[] {
   if (count > 0 && authorIds.length === 0) throw new Error("Pas d'auteur pour les posts");
   return Array.from({ length: count }, (_, i) => {
     const type: PostType = rng.chance(0.2) ? "reel" : "photo";
     const visibility: Visibility = rng.chance(0.1) ? "closeFriends" : "public";
     const tags = [...new Set(Array.from({ length: rng.int(3) }, () => rng.pick(TAGS)))];
+    const createdAt = new Date(now.getTime() - rng.int(60 * DAY_MS));
     return {
+      id: objectId(createdAt, rng),
       authorId: rng.pick(authorIds),
       type,
       // Chemins fictifs : aucun fichier n'est envoyé sur UploadThing.
@@ -95,7 +124,79 @@ export function fakePosts(count: number, authorIds: string[], rng: Rng, now = ne
       location: rng.chance(0.5) ? rng.pick(LOCATIONS) : undefined,
       tags,
       visibility,
-      createdAt: new Date(now.getTime() - rng.int(60 * DAY_MS)),
+      createdAt,
     };
   });
+}
+
+/** Chaque utilisateur suit entre 0 et 2 × `perUser` autres comptes. */
+export function fakeFollows(users: FakeUser[], perUser: number, rng: Rng, now = new Date()): Prisma.FollowCreateManyInput[] {
+  const byId = new Map(users.map((u) => [u.id, u]));
+  const ids = [...byId.keys()];
+  return users.flatMap((follower) =>
+    sample(ids, rng.int(2 * perUser + 1), rng, follower.id).map((followingId) => {
+      const since = Math.max(follower.createdAt.getTime(), byId.get(followingId)!.createdAt.getTime());
+      return { followerId: follower.id, followingId, createdAt: between(new Date(since), now, rng) };
+    }),
+  );
+}
+
+/** Chaque post reçoit entre 0 et 2 × `perPost` likes, jamais de son auteur. */
+export function fakeLikes(posts: FakePost[], userIds: string[], perPost: number, rng: Rng, now = new Date()): WithId<Prisma.LikeCreateManyInput>[] {
+  return posts.flatMap((post) =>
+    sample(userIds, rng.int(2 * perPost + 1), rng, post.authorId).map((userId) => {
+      const createdAt = between(post.createdAt, now, rng);
+      return { id: objectId(createdAt, rng), userId, postId: post.id, createdAt };
+    }),
+  );
+}
+
+export const POINTS = { daily_login: 25, flow_page: 10, like: 2 } as const;
+
+/**
+ * Historique de points d'un utilisateur, de son inscription à `now` : une
+ * connexion quotidienne un jour sur deux environ, 0 à 5 pages de Flow ces
+ * jours-là, et une Bonne dose par like donné. Son solde en est la somme.
+ */
+export function fakePointEvents(user: FakeUser, likesGiven: WithId<Prisma.LikeCreateManyInput>[], rng: Rng, now = new Date()) {
+  const events: Prisma.PointEventCreateManyInput[] = [];
+  const add = (type: keyof typeof POINTS, createdAt: Date, extra: { flowPage?: number; refId?: string } = {}) =>
+    events.push({ userId: user.id, type, amount: POINTS[type], day: parisDay(createdAt), createdAt, ...extra });
+
+  const days = new Set<string>();
+  let flowPage = 0;
+  for (let t = user.createdAt.getTime(); t <= now.getTime(); t += DAY_MS) {
+    const login = between(new Date(t), new Date(Math.min(t + DAY_MS - 1, now.getTime())), rng);
+    // Un pas de 24 h peut retomber sur le même jour de Paris au changement d'heure.
+    if (!rng.chance(0.6) || days.has(parisDay(login))) continue;
+    days.add(parisDay(login));
+    add("daily_login", login);
+    for (let page = rng.int(6), at = login.getTime(); page > 0; page--) {
+      at += 60_000 + rng.int(5 * 60_000);
+      if (at <= now.getTime()) add("flow_page", new Date(at), { flowPage: ++flowPage });
+    }
+  }
+  for (const like of likesGiven) add("like", like.createdAt, { refId: like.postId });
+  return events;
+}
+
+export type SeedCounts = { users: number; posts: number; followsPerUser: number; likesPerPost: number };
+
+/** Toutes les données de démo, cohérentes entre elles : compteurs de likes et soldes justes. */
+export function fakeSeed(counts: SeedCounts, rng: Rng, now = new Date()) {
+  const users = fakeUsers(counts.users, rng, now);
+  const userIds = users.map((u) => u.id);
+  const posts = fakePosts(counts.posts, userIds, rng, now);
+  const follows = fakeFollows(users, counts.followsPerUser, rng, now);
+  const likes = fakeLikes(posts, userIds, counts.likesPerPost, rng, now);
+
+  const likesCount = Map.groupBy(likes, (l) => l.postId);
+  const likesGiven = Map.groupBy(likes, (l) => l.userId);
+  for (const post of posts) post.likesCount = likesCount.get(post.id)?.length ?? 0;
+  const pointEvents = users.flatMap((user) => {
+    const events = fakePointEvents(user, likesGiven.get(user.id) ?? [], rng, now);
+    user.points = user.totalEarned = events.reduce((sum, e) => sum + e.amount, 0);
+    return events;
+  });
+  return { users, posts, follows, likes, pointEvents };
 }
