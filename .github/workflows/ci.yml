@@ -18,7 +18,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: docker compose up -d --wait mongo
       - run: pnpm test
+        env:
+          TEST_MONGODB_URI: mongodb://localhost:27017/detox_test?directConnection=true
       # No UPLOADTHING_TOKEN here: the build must not need it.
       - run: pnpm build
 

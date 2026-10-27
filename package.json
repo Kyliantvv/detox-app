@@ -10,15 +10,16 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "prepare": "husky",
+    "postinstall": "prisma generate",
     "db:seed": "tsx --env-file-if-exists=.env.local scripts/seed.mts",
-    "db:indexes": "tsx --env-file-if-exists=.env.local scripts/indexes.mts"
+    "db:indexes": "prisma db push --skip-generate && tsx --env-file-if-exists=.env.local scripts/indexes.mts"
   },
   "engines": {
     "node": ">=22.9"
   },
   "dependencies": {
+    "@prisma/client": "6.19.3",
     "files-sdk": "^3.1.2",
-    "mongoose": "9.11.4",
     "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -37,6 +38,7 @@
     "eslint-config-next": "16.4.3",
     "eslint-plugin-react-you-might-not-need-an-effect": "^1.0.2",
     "husky": "^9.1.7",
+    "prisma": "6.19.3",
     "supertest": "^7.3.1",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",

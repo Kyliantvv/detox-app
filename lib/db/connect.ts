@@ -1,8 +1,7 @@
-import mongoose from "mongoose";
+import { db } from "./client";
 import { missingIndexes } from "./indexes";
 
-// Survit au hot reload de `next dev`, qui réévalue les modules.
-const cache = globalThis as unknown as { mongoose?: Promise<typeof mongoose> };
+const cache = globalThis as unknown as { dbReady?: Promise<typeof db> };
 
 export function mongoUri() {
   const uri = process.env.MONGODB_URI;
@@ -10,29 +9,26 @@ export function mongoUri() {
   return uri;
 }
 
+/**
+ * Connecte le client une fois par process et le renvoie. En prod, refuse de
+ * démarrer s'il manque des index : les index uniques portent des règles
+ * métier (une page de Flow créditée une fois, un like par post, une
+ * conversation par paire). `pnpm db:indexes` les crée.
+ */
 export function connectDb() {
-  const uri = mongoUri();
-
-  // En dev, Mongoose crée les index tout seul. En prod, pas de createIndex à
-  // chaque démarrage à froid : `pnpm db:indexes` les crée, et on refuse de
-  // démarrer s'il en manque, car les index uniques portent des règles métier
-  // (une page de Flow créditée une fois, un like par post, une conversation par paire).
-  const prod = process.env.NODE_ENV === "production";
-  cache.mongoose ??= mongoose
-    .connect(uri, { autoIndex: !prod })
-    .then(async (m) => {
-      if (prod) {
-        const missing = await missingIndexes();
-        if (missing.length) {
-          await m.disconnect();
-          throw new Error(`Index manquants sur ${missing.map((x) => x.model).join(", ")} : lancer \`pnpm db:indexes\``);
-        }
+  mongoUri();
+  cache.dbReady ??= (async () => {
+    await db.$connect();
+    if (process.env.NODE_ENV === "production") {
+      const missing = await missingIndexes();
+      if (missing.length) {
+        throw new Error(`Index manquants sur ${missing.map((x) => x.collection).join(", ")} : lancer \`pnpm db:indexes\``);
       }
-      return m;
-    })
-    .catch((err) => {
-      cache.mongoose = undefined;
-      throw err;
-    });
-  return cache.mongoose;
+    }
+    return db;
+  })().catch((err: unknown) => {
+    cache.dbReady = undefined;
+    throw err;
+  });
+  return cache.dbReady;
 }
