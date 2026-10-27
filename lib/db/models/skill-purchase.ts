@@ -23,6 +23,7 @@ const skillPurchaseSchema = new Schema(
     buyerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     targetId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     skill: { type: String, enum: Object.keys(SKILLS) as Skill[], required: true },
+    // Toujours le prix de SKILLS, fixé à la validation : l'appelant ne le choisit pas.
     price: { type: Number, required: true },
   },
   createdOnlyOptions,
@@ -31,6 +32,9 @@ const skillPurchaseSchema = new Schema(
 skillPurchaseSchema.index({ buyerId: 1, targetId: 1, skill: 1 }, { unique: true });
 
 rejectSelfReference(skillPurchaseSchema, "buyerId", "targetId", "On n'espionne pas son propre compte");
+skillPurchaseSchema.pre("validate", function (this: { skill?: string; price?: number }) {
+  if (this.skill && this.skill in SKILLS) this.price = SKILLS[this.skill as Skill];
+});
 
 export type SkillPurchaseDoc = InferSchemaType<typeof skillPurchaseSchema>;
 export const SkillPurchase = defineModel("SkillPurchase", skillPurchaseSchema);

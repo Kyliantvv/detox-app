@@ -1,4 +1,5 @@
 import { Block } from "./block";
+import { CloseFriend } from "./close-friend";
 import { Comment } from "./comment";
 import { Conversation } from "./conversation";
 import { Draw } from "./draw";
@@ -9,6 +10,7 @@ import { Order } from "./order";
 import { PointEvent } from "./point-event";
 import { Post } from "./post";
 import { ProfileView } from "./profile-view";
+import { Repost } from "./repost";
 import { Save } from "./save";
 import { ShopItem } from "./shop-item";
 import { SkillPurchase } from "./skill-purchase";
@@ -17,6 +19,6 @@ import { User } from "./user";
 
 // Liste explicite : les index ne dépendent pas de l'ordre des imports.
 export const ALL_MODELS = [
-  Block, Comment, Conversation, Draw, Follow, Like, Message, Order,
-  PointEvent, Post, ProfileView, Save, ShopItem, SkillPurchase, Story, User,
+  Block, CloseFriend, Comment, Conversation, Draw, Follow, Like, Message, Order,
+  PointEvent, Post, ProfileView, Repost, Save, ShopItem, SkillPurchase, Story, User,
 ];

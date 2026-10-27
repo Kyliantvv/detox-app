@@ -3,7 +3,8 @@ import { baseOptions, defineModel, jsonOptions } from "../schema-options";
 
 // Tirage serveur : ticket à gratter, loot box ou bonus aléatoire.
 // Les valeurs sont tirées à la création ; le client ne fait que révéler.
-// Le JSON masque les cases non grattées et le gain tant que le tirage est ouvert.
+// Le JSON masque les cases non grattées, le gain et l'objet tant que le tirage est ouvert.
+// Nommé DiceRoll dans le dossier (route /api/dice).
 const drawSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -14,6 +15,8 @@ const drawSchema = new Schema(
       default: [],
     },
     payout: { type: Number, default: 0 },
+    // Loot box : objet gagné à la place (ou en plus) des points.
+    prizeItemId: { type: Schema.Types.ObjectId, ref: "ShopItem" },
     status: { type: String, enum: ["open", "done"], default: "open" },
   },
   {
@@ -21,7 +24,10 @@ const drawSchema = new Schema(
     toJSON: jsonOptions((ret) => {
       const cells = ret.cells as { value?: number; revealed: boolean }[];
       ret.cells = cells.map((c) => (c.revealed ? c : { revealed: false }));
-      if (ret.status !== "done") delete ret.payout;
+      if (ret.status !== "done") {
+        delete ret.payout;
+        delete ret.prizeItemId;
+      }
     }),
   },
 );

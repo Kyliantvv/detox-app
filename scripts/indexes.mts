@@ -1,10 +1,8 @@
 import mongoose from "mongoose";
-import { ALL_MODELS, ensureIndexes } from "../lib/db";
+import { ALL_MODELS, ensureIndexes, mongoUri } from "../lib/db";
 
 // Connexion directe : connectDb refuse de démarrer en prod s'il manque des index.
-const uri = process.env.MONGODB_URI;
-if (!uri) throw new Error("MONGODB_URI manquant (voir .env.example)");
-await mongoose.connect(uri, { autoIndex: false });
+await mongoose.connect(mongoUri(), { autoIndex: false });
 try {
   const failures = await ensureIndexes();
   for (const f of failures) console.error(`${f.model} : ${f.error}`);

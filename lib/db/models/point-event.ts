@@ -1,5 +1,6 @@
 import { type InferSchemaType, Schema } from "mongoose";
-import { createdOnlyOptions, parisDay, defineModel } from "../schema-options";
+import { createdOnlyOptions, defineModel } from "../schema-options";
+import { parisDay } from "../time";
 
 export const POINT_EVENT_TYPES = [
   "flow_page",
@@ -14,6 +15,8 @@ export const POINT_EVENT_TYPES = [
   "draw_cost",
   "draw_payout",
 ] as const;
+
+export type PointEventType = (typeof POINT_EVENT_TYPES)[number];
 
 // Journal de chaque mouvement de points, écrit par le serveur uniquement.
 // Sert aussi à l'historique et à plusieurs compétences (temps de scroll,
@@ -43,6 +46,11 @@ pointEventSchema.index({ userId: 1, day: 1, type: 1 });
 pointEventSchema.index(
   { userId: 1, flowPage: 1 },
   { unique: true, partialFilterExpression: { type: "flow_page" } },
+);
+// La connexion quotidienne (+25) n'est créditée qu'une fois par jour.
+pointEventSchema.index(
+  { userId: 1, day: 1 },
+  { unique: true, partialFilterExpression: { type: "daily_login" }, name: "daily_login_once" },
 );
 
 export type PointEventDoc = InferSchemaType<typeof pointEventSchema>;

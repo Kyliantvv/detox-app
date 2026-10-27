@@ -1,6 +1,10 @@
 import { type InferSchemaType, Schema } from "mongoose";
 import { baseOptions, defineModel } from "../schema-options";
 
+// order : fausse commande ; scratch / lootbox : crée un Draw.
+export const SHOP_ITEM_KINDS = ["order", "scratch", "lootbox"] as const;
+export type ShopItemKind = (typeof SHOP_ITEM_KINDS)[number];
+
 // Article de L'Épicerie. Rempli par `pnpm db:seed`.
 const shopItemSchema = new Schema(
   {
@@ -9,8 +13,7 @@ const shopItemSchema = new Schema(
     description: { type: String, required: true },
     icon: { type: String, required: true },
     price: { type: Number, required: true, min: 0 },
-    // order : fausse commande ; scratch / lootbox : crée un Draw.
-    kind: { type: String, enum: ["order", "scratch", "lootbox"], required: true },
+    kind: { type: String, enum: SHOP_ITEM_KINDS, required: true },
     active: { type: Boolean, default: true },
   },
   baseOptions,

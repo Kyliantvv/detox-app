@@ -4,9 +4,14 @@ import { missingIndexes } from "./indexes";
 // Survit au hot reload de `next dev`, qui réévalue les modules.
 const cache = globalThis as unknown as { mongoose?: Promise<typeof mongoose> };
 
-export function connectDb() {
+export function mongoUri() {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error("MONGODB_URI manquant (voir .env.example)");
+  return uri;
+}
+
+export function connectDb() {
+  const uri = mongoUri();
 
   // En dev, Mongoose crée les index tout seul. En prod, pas de createIndex à
   // chaque démarrage à froid : `pnpm db:indexes` les crée, et on refuse de

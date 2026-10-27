@@ -34,6 +34,7 @@ class UTILISATEUR { ★idUtilisateur
   bio
   avatar
   couleurAvatar
+  role
   derniereActivite
   dateInscription }
 class PUBLICATION { ★idPublication
@@ -65,13 +66,15 @@ class PUBLIER:::assoc { <<association>> }
 class ETIQUETER:::assoc { <<association>> }
 class AIMER:::assoc { <<association>>
   dateLike }
+class REPUBLIER:::assoc { <<association>>
+  dateRepublication }
 class ENREGISTRER:::assoc { <<association>>
   dateEnregistrement }
 class ECRIRE:::assoc { <<association>> }
 class CONCERNER:::assoc { <<association>> }
 class SUIVRE:::assoc { <<association>>
-  procheAmi
   dateSuivi }
+class CERCLE_PROCHE:::assoc { <<association>> }
 class BLOQUER:::assoc { <<association>>
   dateBlocage }
 class EFFECTUER:::assoc { <<association>> }
@@ -87,6 +90,8 @@ PUBLICATION "0,n" -- ETIQUETER
 ETIQUETER -- "0,n" TAG
 UTILISATEUR "0,n" -- AIMER
 AIMER -- "0,n" PUBLICATION
+UTILISATEUR "0,n" -- REPUBLIER
+REPUBLIER -- "0,n" PUBLICATION
 UTILISATEUR "0,n" -- ENREGISTRER
 ENREGISTRER -- "0,n" PUBLICATION
 UTILISATEUR "0,n" -- ECRIRE
@@ -95,6 +100,8 @@ COMMENTAIRE "1,1" -- CONCERNER
 CONCERNER -- "0,n" PUBLICATION
 UTILISATEUR "0,n suiveur" -- SUIVRE
 SUIVRE -- "0,n suivi" UTILISATEUR
+UTILISATEUR "0,n propriétaire" -- CERCLE_PROCHE
+CERCLE_PROCHE -- "0,n ami" UTILISATEUR
 UTILISATEUR "0,n bloqueur" -- BLOQUER
 BLOQUER -- "0,n bloqué" UTILISATEUR
 UTILISATEUR "0,n visiteur" -- EFFECTUER
@@ -116,7 +123,7 @@ classDef assoc fill:#606060,stroke:#707070
 
 ### Économie
 
-ACHETER est ternaire : un acheteur, une cible, une compétence.
+ACHETER est ternaire : un acheteur, une cible, une compétence. TIRAGE s'appelle `DiceRoll` dans le dossier ; GAGNER porte l'objet d'une loot box.
 
 ```mermaid
 classDiagram
@@ -161,6 +168,7 @@ class PASSER:::assoc { <<association>> }
 class PORTER_SUR:::assoc { <<association>> }
 class JOUER:::assoc { <<association>> }
 class COMPOSER:::assoc { <<association>> }
+class GAGNER:::assoc { <<association>> }
 class ACHETER:::assoc { <<association ternaire>>
   prixPaye
   dateAchat }
@@ -172,6 +180,8 @@ COMMANDE "1,1" -- PORTER_SUR
 PORTER_SUR -- "0,n" ARTICLE
 UTILISATEUR "0,n" -- JOUER
 JOUER -- "1,1" TIRAGE
+TIRAGE "0,1" -- GAGNER
+GAGNER -- "0,n" ARTICLE
 TIRAGE "0,n" -- COMPOSER
 COMPOSER -- "1,1 (R)" CASE
 UTILISATEUR "0,n acheteur" -- ACHETER
@@ -197,6 +207,7 @@ class UTILISATEUR { ★idUtilisateur
   bio
   avatar
   couleurAvatar
+  role
   derniereActivite
   dateInscription }
 class PUBLICATION { ★idPublication
@@ -214,6 +225,9 @@ class ETIQUETER { ★#idPublication
 class AIMER { ★#idUtilisateur
   ★#idPublication
   dateLike }
+class REPUBLIER { ★#idUtilisateur
+  ★#idPublication
+  dateRepublication }
 class ENREGISTRER { ★#idUtilisateur
   ★#idPublication
   dateEnregistrement }
@@ -224,8 +238,10 @@ class COMMENTAIRE { ★idCommentaire
   #idPublication }
 class SUIVRE { ★#idSuiveur
   ★#idSuivi
-  procheAmi
   dateSuivi }
+class CERCLE_PROCHE { ★#idProprietaire
+  ★#idAmi
+  dateAjout }
 class BLOQUER { ★#idBloqueur
   ★#idBloque
   dateBlocage }
@@ -256,12 +272,16 @@ ETIQUETER --> PUBLICATION
 ETIQUETER --> TAG
 AIMER --> UTILISATEUR
 AIMER --> PUBLICATION
+REPUBLIER --> UTILISATEUR
+REPUBLIER --> PUBLICATION
 ENREGISTRER --> UTILISATEUR
 ENREGISTRER --> PUBLICATION
 COMMENTAIRE --> UTILISATEUR
 COMMENTAIRE --> PUBLICATION
 SUIVRE --> UTILISATEUR : suiveur
 SUIVRE --> UTILISATEUR : suivi
+CERCLE_PROCHE --> UTILISATEUR : propriétaire
+CERCLE_PROCHE --> UTILISATEUR : ami
 BLOQUER --> UTILISATEUR : bloqueur
 BLOQUER --> UTILISATEUR : bloqué
 VISITE --> UTILISATEUR : visiteur
@@ -312,7 +332,8 @@ class TIRAGE { ★idTirage
   gain
   statut
   dateTirage
-  #idUtilisateur }
+  #idUtilisateur
+  #idArticleGagne }
 class CASE { ★#idTirage
   ★position
   valeur
@@ -329,6 +350,7 @@ EVENEMENT_POINTS --> UTILISATEUR
 COMMANDE --> UTILISATEUR
 COMMANDE --> ARTICLE
 TIRAGE --> UTILISATEUR
+TIRAGE --> ARTICLE : lot
 CASE --> TIRAGE
 ACHETER --> UTILISATEUR : acheteur
 ACHETER --> UTILISATEUR : cible
@@ -353,7 +375,8 @@ Valeurs dérivées stockées (▲) :
 | Source | Champ | Pourquoi |
 |---|---|---|
 | Σ EVENEMENT_POINTS | `users.points`, `totalEarned`, `streak`, `postsSeen` | Débit conditionnel sans recalculer l'historique |
-| nombre de AIMER, COMMENTAIRE | `posts.likesCount`, `commentsCount` | Pas de comptage par post dans le fil |
+| Σ EVENEMENT_POINTS, durée du Bilan | `users.postsSeenToday`, `combo`, `timeSpentSec` | Posts vus du jour, combo en cours et temps passé du Bilan sans relire les événements |
+| nombre de AIMER, REPUBLIER, COMMENTAIRE | `posts.likesCount`, `repostsCount`, `commentsCount` | Pas de comptage par post dans le fil |
 | dernier MESSAGE | `conversations.lastMessageAt`, `lastMessagePreview` | Trie la liste des conversations sans jointure |
 
 ### Social
@@ -369,10 +392,14 @@ class users { ★ObjectId _id
   String bio
   String avatarPath
   String avatarColor
+  String role
   Number points ▲
   Number totalEarned ▲
   Object streak ▲
   Number postsSeen ▲
+  Object postsSeenToday ▲ day, count
+  Object combo ▲ count, lastActionAt
+  Number timeSpentSec ▲
   Date lastActiveAt
   Date createdAt
   unique(email)
@@ -387,6 +414,7 @@ class posts { ★ObjectId _id
   String[] tags ◆
   String visibility
   Number likesCount ▲
+  Number repostsCount ▲
   Number commentsCount ▲
   Date createdAt
   idx(authorId, createdAt)
@@ -396,6 +424,12 @@ class likes { ★ObjectId _id
   ObjectId postId
   Date createdAt
   unique(userId, postId) }
+class reposts { ★ObjectId _id
+  ObjectId userId
+  ObjectId postId
+  Date createdAt
+  unique(userId, postId)
+  idx(postId) }
 class saves { ★ObjectId _id
   ObjectId userId
   ObjectId postId
@@ -410,9 +444,13 @@ class comments { ★ObjectId _id
 class follows { ★ObjectId _id
   ObjectId followerId
   ObjectId followingId
-  Boolean closeFriend
   Date createdAt
   unique(followerId, followingId) }
+class closefriends { ★ObjectId _id
+  ObjectId ownerId
+  ObjectId friendId
+  Date createdAt
+  unique(ownerId, friendId) }
 class blocks { ★ObjectId _id
   ObjectId blockerId
   ObjectId blockedId
@@ -447,12 +485,16 @@ class messages { ★ObjectId _id
 posts --> users : authorId
 likes --> users : userId
 likes --> posts : postId
+reposts --> users : userId
+reposts --> posts : postId
 saves --> users : userId
 saves --> posts : postId
 comments --> users : authorId
 comments --> posts : postId
 follows --> users : followerId
 follows --> users : followingId
+closefriends --> users : ownerId
+closefriends --> users : friendId
 blocks --> users : blockerId
 blocks --> users : blockedId
 profileviews --> users : viewerId
@@ -481,7 +523,8 @@ class pointevents { ★ObjectId _id
   Date createdAt
   idx(userId, createdAt)
   idx(userId, day, type)
-  unique(userId, flowPage) si type=flow_page }
+  unique(userId, flowPage) si type=flow_page
+  unique(userId, day) si type=daily_login }
 class shopitems { ★ObjectId _id
   String slug
   String name
@@ -508,6 +551,7 @@ class draws { ★ObjectId _id
   Number cost
   Object[] cells ◆ value, revealed
   Number payout
+  ObjectId prizeItemId
   String status
   Date createdAt
   idx(userId, status, createdAt) }
@@ -533,6 +577,7 @@ pointevents --> users : userId
 orders --> users : userId
 orders --> shopitems : itemId
 draws --> users : userId
+draws --> shopitems : prizeItemId
 skillpurchases --> users : buyerId
 skillpurchases --> users : targetId
 skillpurchases ..> SKILLS : skill

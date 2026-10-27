@@ -14,6 +14,7 @@ const postSchema = new Schema(
     // Compteurs dénormalisés : ne modifier que via lib/db/social.ts.
     likesCount: { type: Number, default: 0, min: 0 },
     commentsCount: { type: Number, default: 0, min: 0 },
+    repostsCount: { type: Number, default: 0, min: 0 },
   },
   baseOptions,
 );
