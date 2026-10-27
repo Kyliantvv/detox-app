@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { InvalidInputError } from "./errors";
 
 // Prisma ne valide que les types : les longueurs, minimums et normalisations
-// que portait Mongoose sont appliqués ici, à
+// sont appliqués ici, à
 // chaque create, createMany, update, updateMany et upsert, transactions
 // comprises. Les écritures imbriquées (`posts: { create: … }`) et les
 // opérations atomiques (`increment`) n'y passent pas.

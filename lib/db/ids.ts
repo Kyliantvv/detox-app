@@ -18,7 +18,7 @@ const MAX_ATTEMPTS = 3;
 /**
  * Exécute `fn` dans la transaction de l'appelant, ou dans une nouvelle si `tx`
  * est absent. Une nouvelle transaction est rejouée en cas de conflit d'écriture
- * (P2034), comme le faisait Mongoose.
+ * (P2034).
  */
 export async function inTransaction<T>(tx: Tx | undefined, fn: (tx: Tx) => Promise<T>): Promise<T> {
   if (tx) return fn(tx);

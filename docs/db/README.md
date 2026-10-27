@@ -47,16 +47,16 @@ Rien ne crée les index au démarrage, en dev non plus : lancer `pnpm db:indexes
 | `Save` | saves | Post enregistré |
 | `Comment` | comments | Commentaire, 500 caractères max |
 | `Follow` | follows | Abonnement |
-| `CloseFriend` | closefriends | Cercle proche de `ownerId` : qui voit ses posts `closeFriends` |
+| `CloseFriend` | close_friends | Cercle proche de `ownerId` : qui voit ses posts `closeFriends` |
 | `Block` | blocks | Blocage |
 | `Story` | stories | Instant ; supprimé par Mongo 24 h après (index TTL) |
 | `Conversation` | conversations | Deux participants, une seule conversation par paire |
 | `Message` | messages | Message, `readAt` à la lecture |
-| `ProfileView` | profileviews | Visite de profil (compétence Clairvoyance) |
-| `PointEvent` | pointevents | Journal de chaque gain et dépense de points |
-| `ShopItem` | shopitems | Article de L'Épicerie |
+| `ProfileView` | profile_views | Visite de profil (compétence Clairvoyance) |
+| `PointEvent` | point_events | Journal de chaque gain et dépense de points |
+| `ShopItem` | shop_items | Article de L'Épicerie |
 | `Order` | orders | Fausse commande avec faux suivi |
-| `SkillPurchase` | skillpurchases | Compétence Clairvoyance achetée sur une cible |
+| `SkillPurchase` | skill_purchases | Compétence Clairvoyance achetée sur une cible |
 | `Draw` | draws | Ticket à gratter, loot box ou bonus (`DiceRoll` dans le dossier) ; `prizeItemId` pour l'objet d'une loot box |
 
 Le catalogue des 10 compétences n'est pas une collection : c'est la constante `SKILLS` dans `lib/db/skills.ts`.
@@ -97,8 +97,8 @@ Un achat doit débiter et créer son document dans la même transaction, sinon u
 
 ```ts
 await inTransaction(undefined, async (tx) => {
-  const order = await tx.order.create({ data: { userId, itemId, item, fakeAddress, trackingNumber } });
-  await spendPoints(userId, item.price, "shop_purchase", { refId: order.id, tx });
+  const order = await tx.order.create({ data: { userId, itemId, itemSnapshot, fakeAddress, trackingNumber } });
+  await spendPoints(userId, itemSnapshot.price, "shop_purchase", { refId: order.id, tx });
 });
 ```
 
@@ -114,7 +114,7 @@ Si le document ne peut pas être créé (doublon, validation) ou si le solde ne 
 
 **Conversations.** Utiliser `findOrCreateConversation(a, b)`, qui renvoie la conversation existante ou la crée.
 
-**Auto-référence.** On ne peut pas se suivre, se bloquer, s'ajouter à son cercle proche ni s'acheter une compétence sur soi-même. La règle, comme les longueurs max et les minimums du schéma Mongoose d'origine, est vérifiée par `lib/db/validation.ts` à chaque `create`, `createMany`, `update`, `updateMany` et `upsert`, mais pas dans les écritures imbriquées (`posts: { create: … }`).
+**Auto-référence.** On ne peut pas se suivre, se bloquer, s'ajouter à son cercle proche ni s'acheter une compétence sur soi-même. La règle, comme les longueurs max et les minimums, est vérifiée par `lib/db/validation.ts` à chaque `create`, `createMany`, `update`, `updateMany` et `upsert`, mais pas dans les écritures imbriquées (`posts: { create: … }`).
 
 **Réponses d'API.** Les documents Prisma ont déjà `id` et jamais `_id` ; `passwordHash` est omis de toutes les lectures (`omit: { passwordHash: false }` pour le lire à la connexion). Deux modèles ne s'envoient pas tels quels :
 

@@ -33,9 +33,9 @@ export class InsufficientPointsError extends DbError {
 
 const known = (err: unknown, code: string) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === code;
 
-/** Violation d'un index unique (P2002, E11000) : doublon de like, de page de Flow, d'achat… */
+/** Violation d'un index unique (P2002) : doublon de like, de page de Flow, d'achat… */
 export function isDuplicateKey(err: unknown) {
-  return known(err, "P2002") || (err as { code?: unknown } | null)?.code === 11000;
+  return known(err, "P2002");
 }
 
 /**

@@ -368,7 +368,7 @@ Du MLD au MPD, six relations passent dans des documents :
 | PARTICIPER | `conversations.participantIds[2]` ◆ + `pairKey` | Toujours 2 participants ; `pairKey` unique empêche les doublons |
 | CASE | `draws.cells[]` ◆ | Les cases n'existent qu'à travers leur ticket |
 | COMPETENCE | constante `SKILLS` | 10 lignes fixes, une collection n'apporte rien |
-| COMMANDE → ARTICLE | `orders.item` ◆ `{name, price}` | Garde le nom et le prix au moment de l'achat |
+| COMMANDE → ARTICLE | `orders.itemSnapshot` ◆ `{name, price}` | Garde le nom et le prix au moment de l'achat |
 
 Valeurs dérivées stockées (▲) :
 
@@ -446,7 +446,7 @@ class follows { ★ObjectId _id
   ObjectId followingId
   Date createdAt
   unique(followerId, followingId) }
-class closefriends { ★ObjectId _id
+class close_friends { ★ObjectId _id
   ObjectId ownerId
   ObjectId friendId
   Date createdAt
@@ -456,7 +456,7 @@ class blocks { ★ObjectId _id
   ObjectId blockedId
   Date createdAt
   unique(blockerId, blockedId) }
-class profileviews { ★ObjectId _id
+class profile_views { ★ObjectId _id
   ObjectId viewerId
   ObjectId profileId
   Date createdAt
@@ -493,12 +493,12 @@ comments --> users : authorId
 comments --> posts : postId
 follows --> users : followerId
 follows --> users : followingId
-closefriends --> users : ownerId
-closefriends --> users : friendId
+close_friends --> users : ownerId
+close_friends --> users : friendId
 blocks --> users : blockerId
 blocks --> users : blockedId
-profileviews --> users : viewerId
-profileviews --> users : profileId
+profile_views --> users : viewerId
+profile_views --> users : profileId
 stories --> users : authorId
 stories --> users : viewerIds[]
 conversations --> users : participantIds[]
@@ -513,7 +513,7 @@ classDiagram
 direction LR
 class users { ★ObjectId _id
   … voir MPD social }
-class pointevents { ★ObjectId _id
+class point_events { ★ObjectId _id
   ObjectId userId
   Number amount
   String type
@@ -525,7 +525,7 @@ class pointevents { ★ObjectId _id
   idx(userId, day, type)
   unique(userId, flowPage) si type=flow_page
   unique(userId, day) si type=daily_login }
-class shopitems { ★ObjectId _id
+class shop_items { ★ObjectId _id
   String slug
   String name
   String description
@@ -537,7 +537,7 @@ class shopitems { ★ObjectId _id
 class orders { ★ObjectId _id
   ObjectId userId
   ObjectId itemId
-  Object item ◆ name, price
+  Object itemSnapshot ◆ name, price
   Number quantity
   String fakeAddress
   String trackingNumber
@@ -555,7 +555,7 @@ class draws { ★ObjectId _id
   String status
   Date createdAt
   idx(userId, status, createdAt) }
-class skillpurchases { ★ObjectId _id
+class skill_purchases { ★ObjectId _id
   ObjectId buyerId
   ObjectId targetId
   String skill
@@ -573,13 +573,13 @@ class SKILLS:::code { <<constante TS, pas de collection>>
   peak_hours 350
   close_circle 400
   full_dossier 800 }
-pointevents --> users : userId
+point_events --> users : userId
 orders --> users : userId
-orders --> shopitems : itemId
+orders --> shop_items : itemId
 draws --> users : userId
-draws --> shopitems : prizeItemId
-skillpurchases --> users : buyerId
-skillpurchases --> users : targetId
-skillpurchases ..> SKILLS : skill
+draws --> shop_items : prizeItemId
+skill_purchases --> users : buyerId
+skill_purchases --> users : targetId
+skill_purchases ..> SKILLS : skill
 classDef code fill:#606060,stroke:#707070
 ```
