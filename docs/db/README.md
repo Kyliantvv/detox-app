@@ -32,7 +32,9 @@ Node 22.9 ou plus récent (`.nvmrc`) : les scripts utilisent `--env-file-if-exis
 | Script | Effet |
 |---|---|
 | `pnpm db:indexes` | `prisma db push` (collections et index du schéma), puis les index que Prisma ne sait pas décrire (uniques partiels, TTL, dans `lib/db/indexes.ts`). N'en supprime aucun. Code de sortie 1 si un index échoue ou manque. À relancer après chaque changement de schéma. |
-| `pnpm db:seed` | Crée ou met à jour les 4 articles de L'Épicerie. Relançable sans doublon. |
+| `pnpm db:seed` | Crée ou met à jour les 4 articles de L'Épicerie, puis remplace les comptes de démo : 100 utilisateurs et 500 posts par défaut. Relançable sans doublon. |
+
+**Données de démo.** `pnpm db:seed --users 20 --posts 50` en change le nombre ; `--seed 7` change la graine, et une même graine redonne les mêmes données. Les comptes de démo ont un e-mail en `@seed.detox.local` et le mot de passe `detox1234`. Chaque lancement les supprime avec tout ce qui en dépend (posts, likes, abonnements, et les likes ou commentaires d'autres comptes sur leurs posts), puis les recrée ; les autres comptes ne sont pas touchés. Les posts pointent vers des médias fictifs (`seed/photo-1.jpg`) : rien n'est envoyé sur UploadThing. Ni likes ni abonnements ne sont générés, et les soldes restent à 0 : les points ne s'écrivent que par `creditPoints`.
 
 Rien ne crée les index au démarrage, en dev non plus : lancer `pnpm db:indexes` sur une base neuve. En production (`NODE_ENV=production`), `connectDb()` refuse de se connecter s'il manque un index requis (`REQUIRED_INDEXES`) : lancer `pnpm db:indexes` avant de déployer. Les index uniques portent des règles métier (une page de Flow créditée une fois, un like par post, une conversation par paire), d'où ce blocage.
 
