@@ -26,14 +26,45 @@ Détox a la forme d'Instagram (fil, stories, reels, messages, recherche, profil)
 
 ## Lancer le projet
 
+Prérequis : Node.js 22 et pnpm 10.
+
 ```bash
-cp backend/.env.example backend/.env   # puis renseigner JWT_SECRET
-docker compose up --build
+pnpm install
+cp .env.example .env.local   # puis renseigner les variables ci-dessous
+pnpm dev
 ```
 
-- App : http://localhost:5173
-- API : http://localhost:3000/api (santé : `GET /api/health`)
-- Swagger : http://localhost:3000/api/docs
+- App : http://localhost:3000
+
+**Variables d'environnement**
+
+| Variable | Rôle |
+|---|---|
+| `UPLOADTHING_TOKEN` | Clé d'API UploadThing (dashboard UploadThing → API Keys) |
+| `FILES_API_SECRET` | Secret qui signe les envois de fichiers (`openssl rand -hex 32`) |
+
+Le build passe sans ces variables, mais les envois de fichiers échouent.
+
+**Scripts**
+
+| Commande | Rôle |
+|---|---|
+| `pnpm dev` | Serveur de développement |
+| `pnpm build` | Build de production |
+| `pnpm lint` | ESLint |
+| `pnpm typecheck` | Génère les types des routes Next.js, puis lance `tsc` |
+| `pnpm test` | Tests Vitest |
+
+La CI lance `lint`, `typecheck`, `test` et `build` sur chaque PR, et vérifie les messages de commit avec commitlint.
+
+**Envoi de fichiers**
+
+Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadThing. Règles appliquées par le serveur :
+
+- Images uniquement : AVIF, GIF, JPEG, PNG, WebP. Le SVG est refusé, car il peut contenir des scripts.
+- 4 Mo maximum par fichier (la limite de Vercel est de 4,5 Mo par requête).
+- Le serveur choisit le nom du fichier ; un client ne peut pas écraser un fichier existant.
+- Pas encore d'authentification : n'importe qui peut envoyer une image et obtenir son URL publique.
 
 ## Contrat d'API
 
