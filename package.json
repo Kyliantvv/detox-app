@@ -11,8 +11,8 @@
     "test": "vitest run",
     "prepare": "husky",
     "postinstall": "prisma generate",
-    "db:seed": "tsx --env-file-if-exists=.env.local scripts/seed.mts",
-    "db:indexes": "prisma db push --skip-generate && tsx --env-file-if-exists=.env.local scripts/indexes.mts"
+    "db:seed": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed.mts",
+    "db:indexes": "prisma db push --skip-generate && tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/indexes.mts"
   },
   "engines": {
     "node": ">=22.9"

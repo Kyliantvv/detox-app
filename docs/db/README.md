@@ -10,7 +10,7 @@ Prisma 7 ne gère pas encore MongoDB : rester sur la 6.19 tant que ce n'est pas 
 
 ```bash
 docker compose up -d --wait   # MongoDB 7 en replica set sur le port 27017 (MONGO_PORT pour en changer)
-echo 'MONGODB_URI=mongodb://localhost:27017/detox?directConnection=true' >> .env.local
+echo 'MONGODB_URI=mongodb://localhost:27017/detox?directConnection=true' >> .env.local   # l'emporte sur .env
 pnpm db:indexes
 pnpm db:seed
 ```
@@ -19,7 +19,7 @@ pnpm db:seed
 
 1. Dans Atlas : créer un cluster (le palier gratuit M0 suffit), un utilisateur de base, et autoriser son IP dans *Network Access*.
 2. *Database > Connect > Drivers* : copier la chaîne de connexion.
-3. `cp .env.example .env.local`, puis coller la chaîne dans `MONGODB_URI` en ajoutant le nom de base (`/detox`) avant le `?`.
+3. `cp .env.example .env`, puis coller la chaîne dans `MONGODB_URI` en ajoutant le nom de base (`/detox`) avant le `?`.
 4. Créer les index puis remplir la boutique :
 
    ```bash
@@ -32,7 +32,9 @@ Node 22.9 ou plus récent (`.nvmrc`) : les scripts utilisent `--env-file-if-exis
 | Script | Effet |
 |---|---|
 | `pnpm db:indexes` | `prisma db push` (collections et index du schéma), puis les index que Prisma ne sait pas décrire (uniques partiels, TTL, dans `lib/db/indexes.ts`). N'en supprime aucun. Code de sortie 1 si un index échoue ou manque. À relancer après chaque changement de schéma. |
-| `pnpm db:seed` | Crée ou met à jour les 4 articles de L'Épicerie. Relançable sans doublon. |
+| `pnpm db:seed` | Crée ou met à jour les 4 articles de L'Épicerie, puis remplace les comptes de démo : 100 utilisateurs, 500 posts, leurs abonnements, likes et soldes par défaut. Relançable sans doublon. |
+
+**Données de démo.** `pnpm db:seed --users 20 --posts 50` en change le nombre ; `--follows 20` et `--likes 10` règlent le nombre moyen d'abonnements par utilisateur et de likes par post ; `--seed 7` change la graine, et une même graine redonne les mêmes données, à des dates comptées depuis le lancement. Les comptes de démo ont un e-mail en `@seed.detox.local` et le mot de passe `detox1234`. Chaque lancement les supprime avec tout ce qui en dépend (posts, likes, abonnements, et les likes ou commentaires d'autres comptes sur leurs posts), puis les recrée ; les autres comptes ne sont pas touchés. Les posts pointent vers des médias fictifs (`seed/photo-1.jpg`) : rien n'est envoyé sur UploadThing. Chaque compte a un journal de points (`point_events`) depuis son inscription : connexions quotidiennes (+25), pages de Flow (+10) et une Bonne dose (+2) par like donné. `points` et `totalEarned` en sont la somme, et `likesCount` compte les likes générés ; aucune dépense n'est générée. Le seed insère tout d'un bloc, sans passer par `creditPoints` ni `likePost`, mais en calcule le même résultat.
 
 Rien ne crée les index au démarrage, en dev non plus : lancer `pnpm db:indexes` sur une base neuve. En production (`NODE_ENV=production`), `connectDb()` refuse de se connecter s'il manque un index requis (`REQUIRED_INDEXES`) : lancer `pnpm db:indexes` avant de déployer. Les index uniques portent des règles métier (une page de Flow créditée une fois, un like par post, une conversation par paire), d'où ce blocage.
 
