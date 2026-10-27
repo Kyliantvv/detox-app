@@ -10,13 +10,13 @@ Détox a la forme d'Instagram (fil, stories, reels, messages, recherche, profil)
 
 ## Stack
 
-- **Front** : React + Vite, JavaScript, React Router
-- **Back** : Node.js + Express (routes / contrôleurs / services / modèles)
-- **Base** : MongoDB + Mongoose ; médias sur disque via Multer (`uploads/`)
-- **Sécurité** : bcrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
-- **Qualité** : ESLint, Vitest + Supertest, Swagger/OpenAPI
+- **App** : Next.js 16 (App Router), React, TypeScript ; l'API vit dans `app/api/`
+- **Médias** : UploadThing via `files-sdk` (route `/api/files`)
+- **Base** (prévu) : MongoDB + Mongoose
+- **Sécurité** (prévu) : bcrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
+- **Qualité** : ESLint, Vitest + Supertest ; Swagger/OpenAPI prévu
 - **Commits** : [Conventional Commits](https://www.conventionalcommits.org/fr/) (`feat:`, `fix:`, `test:`…), vérifiés par commitlint (hook `commit-msg` + CI)
-- **Lancement** : monorepo `frontend/` + `backend/`, `docker compose up` (mongo, backend, frontend)
+- **Lancement** : une seule app Next.js, voir ci-dessous
 
 **Pourquoi Vitest plutôt que Jest**
 
@@ -43,7 +43,7 @@ pnpm dev
 | `UPLOADTHING_TOKEN` | Clé d'API UploadThing (dashboard UploadThing → API Keys) |
 | `FILES_API_SECRET` | Secret qui signe les envois de fichiers (`openssl rand -hex 32`) |
 
-Le build passe sans ces variables, mais les envois de fichiers échouent.
+Le build passe sans ces variables. En production, `/api/files` renvoie une erreur 500 tant que `FILES_API_SECRET` manque : sans lui, chaque instance signerait les envois avec son propre secret et les envois échoueraient au hasard.
 
 **Scripts**
 
@@ -61,7 +61,7 @@ La CI lance `lint`, `typecheck`, `test` et `build` sur chaque PR, et vérifie le
 
 Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadThing. Règles appliquées par le serveur :
 
-- Images uniquement : AVIF, GIF, JPEG, PNG, WebP. Le SVG est refusé, car il peut contenir des scripts.
+- Images uniquement : AVIF, GIF, JPEG, PNG, WebP. Le serveur vérifie le type déclaré et les premiers octets du fichier. Le SVG est refusé, car il peut contenir des scripts.
 - 4 Mo maximum par fichier (la limite de Vercel est de 4,5 Mo par requête).
 - Le serveur choisit le nom du fichier ; un client ne peut pas écraser un fichier existant.
 - Pas encore d'authentification : n'importe qui peut envoyer une image et obtenir son URL publique.
