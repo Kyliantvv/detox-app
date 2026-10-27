@@ -41,8 +41,8 @@ const setup = () => {
   return { files, server, client };
 };
 
-const image = (size = 4) =>
-  new File([new Uint8Array(size)], "photo.png", { type: "image/png" });
+const image = (size = 4, name = "photo.png", type = "image/png") =>
+  new File([new Uint8Array(size)], name, { type });
 
 describe("POST /api/files", () => {
   it("answers capabilities", async () => {
@@ -101,5 +101,33 @@ describe("upload", () => {
       code: "Invalid",
       message: "upload exceeds maxUploadSize",
     });
+  });
+
+  it.each([
+    ["text", "notes.txt", "text/plain"],
+    // SVG can carry scripts, and uploads are served inline.
+    ["SVG", "logo.svg", "image/svg+xml"],
+  ])("refuses %s files", async (_, name, type) => {
+    const { client } = setup();
+
+    await expect(client.upload(image(4, name, type))).rejects.toMatchObject({
+      code: "Invalid",
+      message: "only images can be uploaded",
+    });
+  });
+
+  it("refuses a client-chosen key", async () => {
+    const { files, server } = setup();
+
+    const res = await request(server)
+      .put("/?op=upload&key=photo.png")
+      .set("content-type", "image/png")
+      .send(Buffer.from([0, 0, 0, 0]));
+
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({
+      error: { code: "Validation", message: "uploads can't choose their key" },
+    });
+    expect((await files.list()).items).toEqual([]);
   });
 });
