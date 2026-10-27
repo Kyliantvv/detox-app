@@ -1,21 +1,26 @@
-import mongoose, { type Types } from "mongoose";
+import mongoose, { type ClientSession, type Types } from "mongoose";
+import { NotFoundError } from "./errors";
 import { POINT_EVENT_TYPES, PointEvent } from "./models/point-event";
 import { User } from "./models/user";
 
 type Id = Types.ObjectId | string;
 type EventType = (typeof POINT_EVENT_TYPES)[number];
 
-export class InsufficientPointsError extends Error {
-  constructor() {
-    super("Solde insuffisant");
-  }
-}
-
 // Chaque mouvement de points écrit le solde et son PointEvent dans la même
 // transaction : l'un ne peut pas exister sans l'autre.
+//
+// Sans `session`, chaque fonction ouvre sa propre transaction. Pour lier le
+// mouvement à une autre écriture (achat, commande, tirage), passer la session
+// de sa propre transaction : tout est validé ou annulé ensemble.
+//
+//   await mongoose.connection.transaction(async (session) => {
+//     if (!(await spendPoints(userId, price, "skill_purchase", { session }))) throw new Error("Solde insuffisant");
+//     await SkillPurchase.create([{ buyerId: userId, targetId, skill, price }], { session });
+//   });
 
 /**
- * Crédite `amount` points et journalise le gain.
+ * Crédite `amount` points (0 ne fait rien, pratique pour un tirage perdant).
+ * Lève NotFoundError si l'utilisateur n'existe pas.
  * Pour une page de Flow, passer `flowPage` : un second crédit de la même page
  * lève une erreur E11000 (code 11000) et rien n'est crédité.
  */
@@ -23,16 +28,19 @@ export async function creditPoints(
   userId: Id,
   amount: number,
   type: EventType,
-  extra: { flowPage?: number; refId?: Id } = {},
+  opts: { flowPage?: number; refId?: Id; session?: ClientSession } = {},
 ) {
-  assertPositiveInt(amount);
-  await mongoose.connection.transaction(async (session) => {
-    await PointEvent.create([{ userId, amount, type, ...extra }], { session });
-    await User.updateOne(
+  assertInt(amount, 0);
+  if (amount === 0) return;
+  const { session, ...extra } = opts;
+  await inTransaction(session, async (s) => {
+    const res = await User.updateOne(
       { _id: userId },
       { $inc: { points: amount, totalEarned: amount }, $set: { lastActiveAt: new Date() } },
-      { session },
+      { session: s },
     );
+    if (res.matchedCount !== 1) throw new NotFoundError("Utilisateur");
+    await PointEvent.create([{ userId, amount, type, ...extra }], { session: s });
   });
 }
 
@@ -41,25 +49,31 @@ export async function creditPoints(
  * Le filtre `points >= amount` empêche le solde négatif et la double dépense.
  * Renvoie false si le solde est insuffisant ; rien n'est écrit dans ce cas.
  */
-export async function spendPoints(userId: Id, amount: number, type: EventType, extra: { refId?: Id } = {}) {
-  assertPositiveInt(amount);
-  try {
-    await mongoose.connection.transaction(async (session) => {
-      const res = await User.updateOne(
-        { _id: userId, points: { $gte: amount } },
-        { $inc: { points: -amount } },
-        { session },
-      );
-      if (res.modifiedCount !== 1) throw new InsufficientPointsError();
-      await PointEvent.create([{ userId, amount: -amount, type, ...extra }], { session });
-    });
-    return true;
-  } catch (err) {
-    if (err instanceof InsufficientPointsError) return false;
-    throw err;
-  }
+export async function spendPoints(
+  userId: Id,
+  amount: number,
+  type: EventType,
+  opts: { refId?: Id; session?: ClientSession } = {},
+) {
+  assertInt(amount, 1);
+  const { session, ...extra } = opts;
+  let spent = false;
+  await inTransaction(session, async (s) => {
+    const res = await User.updateOne(
+      { _id: userId, points: { $gte: amount } },
+      { $inc: { points: -amount } },
+      { session: s },
+    );
+    spent = res.modifiedCount === 1;
+    if (spent) await PointEvent.create([{ userId, amount: -amount, type, ...extra }], { session: s });
+  });
+  return spent;
 }
 
-function assertPositiveInt(amount: number) {
-  if (!Number.isInteger(amount) || amount <= 0) throw new Error("Montant de points invalide");
+function inTransaction(session: ClientSession | undefined, fn: (s: ClientSession) => Promise<void>) {
+  return session ? fn(session) : mongoose.connection.transaction(fn);
+}
+
+function assertInt(amount: number, min: number) {
+  if (!Number.isInteger(amount) || amount < min) throw new Error("Montant de points invalide");
 }

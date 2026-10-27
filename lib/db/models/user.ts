@@ -1,5 +1,9 @@
 import { type InferSchemaType, Schema } from "mongoose";
-import { baseOptions, defineModel } from "../schema-options";
+import { baseOptions, defineModel, jsonOptions } from "../schema-options";
+
+// Données privées : jamais dans le JSON public, puisque Clairvoyance vend
+// le solde, la série et la dernière connexion.
+const PRIVATE_FIELDS = ["email", "points", "totalEarned", "streak", "postsSeen", "lastActiveAt"];
 
 const userSchema = new Schema(
   {
@@ -24,7 +28,12 @@ const userSchema = new Schema(
     postsSeen: { type: Number, default: 0 },
     lastActiveAt: Date,
   },
-  baseOptions,
+  {
+    ...baseOptions,
+    toJSON: jsonOptions((ret) => {
+      for (const f of PRIVATE_FIELDS) delete ret[f];
+    }),
+  },
 );
 
 export function levelFor(totalEarned: number) {
@@ -33,4 +42,12 @@ export function levelFor(totalEarned: number) {
 
 export type UserDoc = InferSchemaType<typeof userSchema>;
 export const User = defineModel("User", userSchema);
+
+/** JSON du compte connecté (`/me`) : le public plus les champs privés, sans `passwordHash`. */
+export function toSelfJSON(user: InstanceType<typeof User>) {
+  const self: Record<string, unknown> = user.toObject({ virtuals: true, versionKey: false });
+  delete self._id;
+  delete self.passwordHash;
+  return self;
+}
 

@@ -1,8 +1,9 @@
 import { type InferSchemaType, Schema } from "mongoose";
-import { baseOptions, defineModel } from "../schema-options";
+import { baseOptions, defineModel, jsonOptions } from "../schema-options";
 
 // Tirage serveur : ticket à gratter, loot box ou bonus aléatoire.
 // Les valeurs sont tirées à la création ; le client ne fait que révéler.
+// Le JSON masque les cases non grattées et le gain tant que le tirage est ouvert.
 const drawSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -15,7 +16,14 @@ const drawSchema = new Schema(
     payout: { type: Number, default: 0 },
     status: { type: String, enum: ["open", "done"], default: "open" },
   },
-  baseOptions,
+  {
+    ...baseOptions,
+    toJSON: jsonOptions((ret) => {
+      const cells = ret.cells as { value?: number; revealed: boolean }[];
+      ret.cells = cells.map((c) => (c.revealed ? c : { revealed: false }));
+      if (ret.status !== "done") delete ret.payout;
+    }),
+  },
 );
 
 drawSchema.index({ userId: 1, status: 1, createdAt: -1 });

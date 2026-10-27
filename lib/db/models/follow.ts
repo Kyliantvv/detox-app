@@ -1,5 +1,5 @@
 import { type InferSchemaType, Schema } from "mongoose";
-import { createdOnlyOptions, defineModel } from "../schema-options";
+import { createdOnlyOptions, defineModel, rejectSelfReference } from "../schema-options";
 
 // Mon cercle. `closeFriend` remplace un modèle CloseFriend séparé.
 const followSchema = new Schema(
@@ -13,6 +13,7 @@ const followSchema = new Schema(
 
 followSchema.index({ followerId: 1, followingId: 1 }, { unique: true });
 followSchema.index({ followingId: 1 });
+rejectSelfReference(followSchema, "followerId", "followingId", "On ne se suit pas soi-même");
 
 export type FollowDoc = InferSchemaType<typeof followSchema>;
 export const Follow = defineModel("Follow", followSchema);

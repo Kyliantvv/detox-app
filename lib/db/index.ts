@@ -1,6 +1,8 @@
 export { connectDb } from "./connect";
-export { ensureIndexes } from "./indexes";
-export { creditPoints, InsufficientPointsError, spendPoints } from "./points";
+export { NotFoundError } from "./errors";
+export { ensureIndexes, missingIndexes } from "./indexes";
+export { ALL_MODELS } from "./models";
+export { creditPoints, spendPoints } from "./points";
 export { parisDay } from "./schema-options";
 export { addComment, likePost, removeComment, unlikePost } from "./social";
 export { Block } from "./models/block";
@@ -18,4 +20,4 @@ export { Save } from "./models/save";
 export { ShopItem } from "./models/shop-item";
 export { type Skill, SKILLS, SkillPurchase } from "./models/skill-purchase";
 export { Story } from "./models/story";
-export { levelFor, User } from "./models/user";
+export { levelFor, toSelfJSON, User } from "./models/user";

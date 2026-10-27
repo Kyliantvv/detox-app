@@ -40,7 +40,7 @@ export async function findOrCreateConversation(a: Types.ObjectId | string, b: Ty
   if (!isValidObjectId(a) || !isValidObjectId(b)) throw new Error("Id utilisateur invalide");
   if (String(a) === String(b)) throw new Error("Conversation avec soi-même");
   const participantIds = [String(a), String(b)].sort().map((id) => new Types.ObjectId(id));
-  const pairKey = participantIds.join(":");
+  const pairKey = conversationPairKey(participantIds[0], participantIds[1]);
   return Conversation.findOneAndUpdate(
     { pairKey },
     { $setOnInsert: { pairKey, participantIds } },

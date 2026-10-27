@@ -21,7 +21,7 @@ Node 22.9 ou plus récent (`.nvmrc`) : les scripts utilisent `--env-file-if-exis
 | `pnpm db:indexes` | Crée les index déclarés dans les schémas. N'en supprime aucun. Code de sortie 1 si un index échoue. À relancer après chaque ajout d'index. |
 | `pnpm db:seed` | Crée ou met à jour les 4 articles de L'Épicerie. Relançable sans doublon. |
 
-`connectDb()` désactive `autoIndex` : l'app ne crée jamais d'index au démarrage, seul `db:indexes` le fait.
+En dev, Mongoose crée les index au démarrage. En production (`NODE_ENV=production`), `connectDb()` n'en crée aucun et refuse de se connecter s'il en manque : lancer `pnpm db:indexes` avant de déployer. Les index uniques portent des règles métier (une page de Flow créditée une fois, un like par post, une conversation par paire), d'où ce blocage.
 
 ## Collections
 
@@ -64,15 +64,33 @@ Ces règles évitent des soldes et des compteurs faux. Les helpers de `lib/db` l
 
 **Points.** Ne jamais écrire `users.points` à la main. Passer par :
 
-- `creditPoints(userId, amount, type, { flowPage?, refId? })` : crédite et journalise dans une transaction. Pour une page de Flow, `flowPage` est obligatoire et une même page ne rapporte qu'une fois (l'erreur E11000 signale le doublon).
-- `spendPoints(userId, amount, type, { refId? })` : renvoie `false` si le solde est insuffisant ; sinon débite et journalise. Le débit est conditionnel (`points >= amount`), donc deux achats simultanés ne peuvent pas faire passer le solde sous 0.
+- `creditPoints(userId, amount, type, { flowPage?, refId?, session? })` : crédite et journalise dans une transaction. `amount` à 0 ne fait rien (tirage perdant). Lève `NotFoundError` si l'utilisateur n'existe pas. Pour une page de Flow, `flowPage` est obligatoire et une même page ne rapporte qu'une fois (l'erreur E11000 signale le doublon).
+- `spendPoints(userId, amount, type, { refId?, session? })` : renvoie `false` si le solde est insuffisant ; sinon débite et journalise. Le débit est conditionnel (`points >= amount`), donc deux achats simultanés ne peuvent pas faire passer le solde sous 0.
+
+Un achat (compétence, commande, tirage) doit débiter et créer son document dans la même transaction, sinon un échec après le débit fait perdre les points. Passer la session :
+
+```ts
+await mongoose.connection.transaction(async (session) => {
+  if (!(await spendPoints(userId, price, "skill_purchase", { session }))) throw new Error("Solde insuffisant");
+  await SkillPurchase.create([{ buyerId: userId, targetId, skill, price }], { session });
+});
+```
+
+Si la compétence est déjà achetée, l'index unique fait échouer `create` et le débit est annulé.
 
 Les transactions demandent un replica set : Atlas en fournit un, même en M0. Un `mongod` local seul ne suffit pas.
 
-**Likes et commentaires.** Utiliser `likePost`, `unlikePost`, `addComment` et `removeComment`. Ils ne modifient `likesCount` et `commentsCount` que si le like ou le commentaire a vraiment été créé ou supprimé.
+**Likes et commentaires.** Utiliser `likePost`, `unlikePost`, `addComment` et `removeComment`. Ils écrivent le like ou le commentaire et le compteur dans une transaction, ne modifient le compteur que si le like ou le commentaire a vraiment été créé ou supprimé, et lèvent `NotFoundError` si le post n'existe pas.
 
 **Conversations.** Utiliser `findOrCreateConversation(a, b)`, qui renvoie la conversation existante ou la crée.
 
-**Réponses d'API.** Envoyer les documents Mongoose (`toJSON` retire `_id`, `__v` et `passwordHash`). Une requête `.lean()` renvoie le document brut : ne pas l'envoyer tel quel au client. `passwordHash` n'est jamais lu sans `.select("+passwordHash")`.
+**Auto-référence.** On ne peut pas se suivre, se bloquer ni s'acheter une compétence sur soi-même. La règle est vérifiée par `create()`/`save()`, pas par les upserts : créer ces documents avec `create()`.
+
+**Réponses d'API.** Envoyer les documents Mongoose : `toJSON` retire `_id`, `__v` et `passwordHash`, et masque en plus :
+
+- sur `User`, les champs privés (`email`, `points`, `totalEarned`, `streak`, `postsSeen`, `lastActiveAt`), puisque Clairvoyance les vend. Pour le compte connecté, renvoyer `toSelfJSON(user)` ;
+- sur `Draw`, la valeur des cases non grattées et `payout` tant que le tirage est ouvert.
+
+ Une requête `.lean()` renvoie le document brut : ne pas l'envoyer tel quel au client. `passwordHash` n'est jamais lu sans `.select("+passwordHash")`.
 
 **Jours.** `parisDay()` donne la date `AAAA-MM-JJ` à l'heure de Paris, pour la série de connexions et les gains du jour.

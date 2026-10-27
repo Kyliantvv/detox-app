@@ -1,5 +1,5 @@
 import { type InferSchemaType, Schema } from "mongoose";
-import { createdOnlyOptions, defineModel } from "../schema-options";
+import { createdOnlyOptions, defineModel, rejectSelfReference } from "../schema-options";
 
 // Les 10 compétences de Clairvoyance et leur prix.
 export const SKILLS = {
@@ -29,6 +29,8 @@ const skillPurchaseSchema = new Schema(
 );
 
 skillPurchaseSchema.index({ buyerId: 1, targetId: 1, skill: 1 }, { unique: true });
+
+rejectSelfReference(skillPurchaseSchema, "buyerId", "targetId", "On n'espionne pas son propre compte");
 
 export type SkillPurchaseDoc = InferSchemaType<typeof skillPurchaseSchema>;
 export const SkillPurchase = defineModel("SkillPurchase", skillPurchaseSchema);
