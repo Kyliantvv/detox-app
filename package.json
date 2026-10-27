@@ -9,9 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "files-sdk": "^3.1.2",
     "next": "16.4.3",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "uploadthing": "^7.7.4"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4.3.3",
