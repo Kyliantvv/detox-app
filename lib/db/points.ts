@@ -1,34 +1,35 @@
-import type { ClientSession } from "mongoose";
+import type { PointEventType } from "@prisma/client";
+import type { Tx } from "./client";
 import { InsufficientPointsError, InvalidInputError, NotFoundError } from "./errors";
-import { type Id, inTransaction, toObjectId } from "./ids";
-import { PointEvent, type PointEventType } from "./models/point-event";
-import { User } from "./models/user";
+import { type Id, inTransaction, toId } from "./ids";
+import { parisDay } from "./time";
 
 // Chaque mouvement de points écrit le solde et son PointEvent dans la même
 // transaction : l'un ne peut pas exister sans l'autre.
 //
-// Sans `session`, chaque fonction ouvre sa propre transaction. Pour lier le
-// mouvement à une autre écriture (achat, commande, tirage), passer la session
+// Sans `tx`, chaque fonction ouvre sa propre transaction. Pour lier le
+// mouvement à une autre écriture (achat, commande, tirage), passer le client
 // de sa propre transaction : tout est validé ou annulé ensemble (voir buySkill).
 
-type Opts = { refId?: Id; session?: ClientSession };
+type Opts = { refId?: Id; tx?: Tx };
 
 /**
  * Crédite `amount` points (0 ne fait rien, pratique pour un tirage perdant).
  * Lève NotFoundError si l'utilisateur n'existe pas.
- * Pour une page de Flow, passer `flowPage` : un second crédit de la même page
- * lève une erreur E11000 (`isDuplicateKey`) et rien n'est crédité. Idem pour
- * une seconde connexion quotidienne le même jour.
+ * Pour une page de Flow, `flowPage` est obligatoire : un second crédit de la
+ * même page lève une erreur de doublon (`isDuplicateKey`) et rien n'est
+ * crédité. Idem pour une seconde connexion quotidienne le même jour.
  */
 export async function creditPoints(userId: Id, amount: number, type: PointEventType, opts: Opts & { flowPage?: number } = {}) {
   assertInt(amount, 0);
+  if (type === "flow_page" && !Number.isInteger(opts.flowPage)) throw new InvalidInputError("flowPage obligatoire pour flow_page");
   if (amount === 0) return;
-  const { session, ...extra } = opts;
-  const _id = toObjectId(userId, "Utilisateur");
-  await inTransaction(session, async (s) => {
-    const res = await User.updateOne({ _id }, { $inc: { points: amount, totalEarned: amount } }, { session: s });
-    if (res.matchedCount !== 1) throw new NotFoundError("Utilisateur");
-    await PointEvent.create([{ userId: _id, amount, type, ...extra }], { session: s });
+  const { tx, refId, flowPage } = opts;
+  const id = toId(userId, "Utilisateur");
+  await inTransaction(tx, async (t) => {
+    const res = await t.user.updateMany({ where: { id }, data: { points: { increment: amount }, totalEarned: { increment: amount } } });
+    if (res.count !== 1) throw new NotFoundError("Utilisateur");
+    await t.pointEvent.create({ data: { userId: id, amount, type, flowPage, refId, day: parisDay() } });
   });
 }
 
@@ -40,12 +41,12 @@ export async function creditPoints(userId: Id, amount: number, type: PointEventT
  */
 export async function spendPoints(userId: Id, amount: number, type: PointEventType, opts: Opts = {}) {
   assertInt(amount, 1);
-  const { session, ...extra } = opts;
-  const _id = toObjectId(userId, "Utilisateur");
-  await inTransaction(session, async (s) => {
-    const res = await User.updateOne({ _id, points: { $gte: amount } }, { $inc: { points: -amount } }, { session: s });
-    if (res.modifiedCount !== 1) throw new InsufficientPointsError();
-    await PointEvent.create([{ userId: _id, amount: -amount, type, ...extra }], { session: s });
+  const { tx, refId } = opts;
+  const id = toId(userId, "Utilisateur");
+  await inTransaction(tx, async (t) => {
+    const res = await t.user.updateMany({ where: { id, points: { gte: amount } }, data: { points: { decrement: amount } } });
+    if (res.count !== 1) throw new InsufficientPointsError();
+    await t.pointEvent.create({ data: { userId: id, amount: -amount, type, refId, day: parisDay() } });
   });
 }
 

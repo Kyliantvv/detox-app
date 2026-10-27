@@ -303,7 +303,7 @@ model ProfileView {
 }
 
 // Instant. Mongo supprime le document à `expiresAt` (index TTL, lib/db/indexes.ts).
-// `expiresAt` par défaut à +24 h : posé par lib/db/validation.ts.
+// `expiresAt` : storyExpiry() pour les 24 h habituelles.
 model Story {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   authorId  String   @db.ObjectId

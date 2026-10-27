@@ -1,32 +1,48 @@
-import { NotFoundError, isDuplicateKey } from "./errors";
-import { type Id, inTransaction, toObjectId } from "./ids";
-import { Comment } from "./models/comment";
-import { Like } from "./models/like";
-import { Post } from "./models/post";
-import { Repost } from "./models/repost";
+import type { Tx } from "./client";
+import { isDuplicateKey, NotFoundError } from "./errors";
+import { type Id, inTransaction, toId } from "./ids";
 
 // Le Like, le Repost ou le Comment et le compteur du Post s'écrivent dans la
 // même transaction. Les compteurs ne bougent que si le document a vraiment été
 // créé ou supprimé : un double clic ne compte qu'une fois et le compteur ne
 // descend jamais sous 0.
 
+type Pair = { userId: string; postId: string };
+
 // Like et Repost : un document par couple (utilisateur, post) et un compteur.
 const REACTIONS = {
-  like: { model: Like, counter: "likesCount" },
-  repost: { model: Repost, counter: "repostsCount" },
+  like: {
+    counter: "likesCount",
+    create: (tx: Tx, data: Pair) => tx.like.create({ data }),
+    remove: (tx: Tx, where: Pair) => tx.like.deleteMany({ where }),
+  },
+  repost: {
+    counter: "repostsCount",
+    create: (tx: Tx, data: Pair) => tx.repost.create({ data }),
+    remove: (tx: Tx, where: Pair) => tx.repost.deleteMany({ where }),
+  },
 } as const;
 type Reaction = keyof typeof REACTIONS;
+type Counter = (typeof REACTIONS)[Reaction]["counter"] | "commentsCount";
+
+/** Ajoute `by` au compteur ; renvoie false si le post n'existe pas (ou si le compteur est déjà à 0). */
+async function bump(tx: Tx, postId: string, counter: Counter, by: 1 | -1) {
+  const res = await tx.post.updateMany({
+    where: by < 0 ? { id: postId, [counter]: { gt: 0 } } : { id: postId },
+    data: { [counter]: { increment: by } },
+  });
+  return res.count === 1;
+}
 
 /** Renvoie true si la réaction est nouvelle. Lève NotFoundError si le post n'existe pas. */
 async function addReaction(kind: Reaction, userId: Id, postId: Id) {
-  const { model, counter } = REACTIONS[kind];
-  const doc = { userId: toObjectId(userId, "Utilisateur"), postId: toObjectId(postId, "Post") };
+  const { counter, create } = REACTIONS[kind];
+  const doc = { userId: toId(userId, "Utilisateur"), postId: toId(postId, "Post") };
   try {
-    return await inTransaction(undefined, async (session) => {
-      const post = await Post.updateOne({ _id: doc.postId }, { $inc: { [counter]: 1 } }, { session });
-      if (post.matchedCount !== 1) throw new NotFoundError("Post");
-      // Une réaction existante fait échouer l'insert (E11000) et annule le $inc.
-      await model.create([doc], { session });
+    return await inTransaction(undefined, async (tx) => {
+      if (!(await bump(tx, doc.postId, counter, 1))) throw new NotFoundError("Post");
+      // Une réaction existante fait échouer l'insert (doublon) et annule l'incrément.
+      await create(tx, doc);
       return true;
     });
   } catch (err) {
@@ -37,12 +53,12 @@ async function addReaction(kind: Reaction, userId: Id, postId: Id) {
 
 /** Renvoie true si une réaction a été retirée. */
 function removeReaction(kind: Reaction, userId: Id, postId: Id) {
-  const { model, counter } = REACTIONS[kind];
-  const doc = { userId: toObjectId(userId, "Utilisateur"), postId: toObjectId(postId, "Post") };
-  return inTransaction(undefined, async (session) => {
-    const res = await model.deleteOne(doc, { session });
-    if (res.deletedCount !== 1) return false;
-    await Post.updateOne({ _id: doc.postId, [counter]: { $gt: 0 } }, { $inc: { [counter]: -1 } }, { session });
+  const { counter, remove } = REACTIONS[kind];
+  const doc = { userId: toId(userId, "Utilisateur"), postId: toId(postId, "Post") };
+  return inTransaction(undefined, async (tx) => {
+    const res = await remove(tx, doc);
+    if (res.count !== 1) return false;
+    await bump(tx, doc.postId, counter, -1);
     return true;
   });
 }
@@ -54,22 +70,22 @@ export const unrepostPost = (userId: Id, postId: Id) => removeReaction("repost",
 
 /** Lève NotFoundError si le post n'existe pas. */
 export function addComment(authorId: Id, postId: Id, text: string) {
-  const doc = { authorId: toObjectId(authorId, "Utilisateur"), postId: toObjectId(postId, "Post"), text };
-  return inTransaction(undefined, async (session) => {
-    const post = await Post.updateOne({ _id: doc.postId }, { $inc: { commentsCount: 1 } }, { session });
-    if (post.matchedCount !== 1) throw new NotFoundError("Post");
-    const [comment] = await Comment.create([doc], { session });
-    return comment;
+  const data = { authorId: toId(authorId, "Utilisateur"), postId: toId(postId, "Post"), text };
+  return inTransaction(undefined, async (tx) => {
+    if (!(await bump(tx, data.postId, "commentsCount", 1))) throw new NotFoundError("Post");
+    return tx.comment.create({ data });
   });
 }
 
 /** Seul l'auteur supprime son commentaire. Renvoie true si supprimé. */
 export function removeComment(authorId: Id, commentId: Id) {
-  const filter = { _id: toObjectId(commentId, "Commentaire"), authorId: toObjectId(authorId, "Utilisateur") };
-  return inTransaction(undefined, async (session) => {
-    const comment = await Comment.findOneAndDelete(filter, { session });
+  const where = { id: toId(commentId, "Commentaire"), authorId: toId(authorId, "Utilisateur") };
+  return inTransaction(undefined, async (tx) => {
+    const comment = await tx.comment.findFirst({ where, select: { postId: true } });
     if (!comment) return false;
-    await Post.updateOne({ _id: comment.postId, commentsCount: { $gt: 0 } }, { $inc: { commentsCount: -1 } }, { session });
+    const res = await tx.comment.deleteMany({ where });
+    if (res.count !== 1) return false;
+    await bump(tx, comment.postId, "commentsCount", -1);
     return true;
   });
 }
