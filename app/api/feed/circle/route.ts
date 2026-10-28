@@ -6,6 +6,17 @@ import { postViews } from "@/lib/server/views";
 
 const LIMIT = 50;
 
+/**
+ * @openapi
+ * /api/feed/circle:
+ *   get:
+ *     tags: [Fil]
+ *     summary: Mon cercle
+ *     description: Photos des comptes suivis et les miennes, du plus récent au plus ancien (50 au plus).
+ *     responses:
+ *       '200': { description: Posts du cercle, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/PostView' } } } } } } }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ */
 // Mon cercle : posts des comptes suivis et les miens, du plus récent au plus ancien.
 export const GET = route(async (request) => {
   const user = await requireUser(request);

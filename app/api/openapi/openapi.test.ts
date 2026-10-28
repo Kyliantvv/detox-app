@@ -1,5 +1,9 @@
+import { readdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { describe, expect, it } from "vitest";
 import { call } from "@/test/api";
+import { buildSpec } from "@/scripts/openapi-spec";
+import generated from "@/lib/openapi.generated.json";
 import * as docs from "../docs/route";
 import { GET } from "./route";
 
@@ -9,12 +13,16 @@ const refs = (value: unknown): string[] =>
     : Object.entries(value).flatMap(([key, child]) => (key === "$ref" ? [child as string] : refs(child)));
 
 describe("GET /api/openapi", () => {
-  it("décrit toutes les routes de L'Épicerie, publiquement", async () => {
+  it("décrit toutes les routes, publiquement", async () => {
     const res = await call(GET);
 
     expect(res.status).toBe(200);
     expect(Object.keys(res.body.paths)).toEqual(
       expect.arrayContaining([
+        "/api/auth/login",
+        "/api/feed/flow",
+        "/api/feed/reels",
+        "/api/posts/{id}/likes",
         "/api/shop",
         "/api/orders",
         "/api/orders/{id}",
@@ -25,6 +33,19 @@ describe("GET /api/openapi", () => {
         "/api/skills/{skillId}",
       ]),
     );
+  });
+
+  it("est à jour avec les blocs @openapi des routes (pnpm openapi)", () => {
+    expect(JSON.parse(JSON.stringify(buildSpec()))).toEqual(generated);
+  });
+
+  it("documente chaque route.ts de app/api", () => {
+    const documented = new Set(Object.keys(generated.paths));
+    const routes = readdirSync("app/api", { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith("route.ts"))
+      .filter((file) => !/^(docs|openapi)\/|\[\.\.\./.test(file))
+      .map((file) => `/api/${dirname(file)}`.replace(/\[(\w+)\]/g, "{$1}"));
+    expect(routes.filter((path) => !documented.has(path))).toEqual([]);
   });
 
   it("ne référence que des schémas et réponses définis", async () => {

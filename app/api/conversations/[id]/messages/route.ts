@@ -18,6 +18,32 @@ async function resolve(request: NextRequest, ctx: Ctx) {
   return { user, other, conversation: await thread(user, other) };
 }
 
+/**
+ * @openapi
+ * /api/conversations/{id}/messages:
+ *   get:
+ *     tags: [Messages]
+ *     summary: Messages d'une conversation
+ *     description: Lu en polling. Marque comme lus les messages reçus. Les réponses programmées des bots n'apparaissent qu'une fois leur heure passée.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string }, description: Id de l'autre compte }
+ *     responses:
+ *       '200': { description: Messages, du plus ancien au plus récent, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/PublicUser' }, items: { type: array, items: { $ref: '#/components/schemas/ChatMessage' } } } } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   post:
+ *     tags: [Messages]
+ *     summary: Envoyer un message
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string }, description: Id de l'autre compte }
+ *     requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [text], properties: { text: { type: string, minLength: 1, maxLength: 500 } } } } } }
+ *     responses:
+ *       '201': { description: Message envoyé, content: { application/json: { schema: { type: object, properties: { message: { $ref: '#/components/schemas/ChatMessage' } } } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ */
 // Lu en polling : les réponses programmées n'apparaissent qu'une fois leur heure passée.
 export const GET = route(async (request, ctx: Ctx) => {
   const { user, other, conversation } = await resolve(request, ctx);

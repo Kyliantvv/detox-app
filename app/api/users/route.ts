@@ -5,6 +5,19 @@ import { followingIds, publicUser } from "@/lib/server/views";
 
 const LIMIT = 50;
 
+/**
+ * @openapi
+ * /api/users:
+ *   get:
+ *     tags: [Comptes]
+ *     summary: Rechercher des comptes
+ *     description: Par nom d'utilisateur ou prénom. Sans `q`, les comptes suivis d'abord (cibles de la Clairvoyance). Maximum 50.
+ *     parameters:
+ *       - { name: q, in: query, required: false, schema: { type: string } }
+ *     responses:
+ *       '200': { description: Comptes trouvés, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/PublicUser' } } } } } } }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ */
 // Recherche de comptes par nom d'utilisateur ou prénom. Sans `q` (cibles de la Clairvoyance),
 // les comptes suivis d'abord.
 export const GET = route(async (request) => {

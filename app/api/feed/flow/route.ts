@@ -9,6 +9,20 @@ import { postViews } from "@/lib/server/views";
 
 const MAX_PAGE = 10_000;
 
+/**
+ * @openapi
+ * /api/feed/flow:
+ *   get:
+ *     tags: [Fil]
+ *     summary: Page du Flow
+ *     description: Infini. Les posts sont choisis par l'algorithme de recommandation (goûts de l'utilisateur, popularité, une surprise) et chacun porte sa `reason`. Chaque page crédite des points une seule fois ; la relire renvoie les mêmes posts.
+ *     parameters:
+ *       - { name: page, in: query, required: false, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+ *     responses:
+ *       '200': { description: Page du Flow, content: { application/json: { schema: { allOf: [{ type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/PostView' } }, page: { type: integer }, nextPage: { type: [integer, 'null'] }, serenity: { type: integer } } }, { $ref: '#/components/schemas/PointsResponse' }] } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ */
 // Flow infini : chaque page est créditée une seule fois (index unique), avec coffre et bonus aléatoire.
 export const GET = route(async (request) => {
   const user = await requireUser(request);

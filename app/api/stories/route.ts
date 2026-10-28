@@ -5,6 +5,17 @@ import { formatAgo } from "@/lib/server/format";
 import { json, route } from "@/lib/server/http";
 import { author } from "@/lib/server/views";
 
+/**
+ * @openapi
+ * /api/stories:
+ *   get:
+ *     tags: [Fil]
+ *     summary: Instants des comptes suivis
+ *     description: Comptes suivis avec leur Instant de moins de 24 h ; ceux qui en ont un d'abord.
+ *     responses:
+ *       '200': { description: Comptes et Instants, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/StoryItem' } } } } } } }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ */
 // Comptes suivis, avec leur Instant s'il a moins de 24 h (ceux qui en ont un d'abord).
 export const GET = route(async (request) => {
   const user = await requireUser(request);

@@ -7,6 +7,31 @@ import { COMMENT_MAX } from "@/lib/validation";
 
 type Ctx = RouteContext<"/api/posts/[id]/comments">;
 
+/**
+ * @openapi
+ * /api/posts/{id}/comments:
+ *   get:
+ *     tags: [Posts]
+ *     summary: Commentaires d'un post
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       '200': { description: Commentaires, du plus ancien au plus récent, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Comment' } } } } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   post:
+ *     tags: [Posts]
+ *     summary: Commenter un post
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string } }
+ *     requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [text], properties: { text: { type: string, minLength: 1, maxLength: 300 } } } } } }
+ *     responses:
+ *       '201': { description: Commentaire ajouté, content: { application/json: { schema: { allOf: [{ type: object, properties: { comment: { $ref: '#/components/schemas/Comment' } } }, { $ref: '#/components/schemas/PointsResponse' }] } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ */
 export const GET = route(async (request, ctx: Ctx) => {
   const { post } = await userAndPost(request, ctx.params);
   const comments = await db.comment.findMany({

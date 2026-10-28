@@ -3,6 +3,21 @@ import { db, toId } from "@/lib/db";
 import { requireUser } from "@/lib/server/auth";
 import { errorResponse, route } from "@/lib/server/http";
 
+/**
+ * @openapi
+ * /api/media/{id}:
+ *   get:
+ *     tags: [Posts]
+ *     summary: Fichier d'un post
+ *     description: Accepte le Bearer ou le cookie de session NextAuth, parce qu'une balise `<img>` n'envoie pas de Bearer.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       '200': { description: Le fichier, content: { 'image/*': { schema: { type: string, format: binary } }, 'video/*': { schema: { type: string, format: binary } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ */
 // Médias publiés, gardés dans MongoDB (collection media).
 // Une balise <img> n'envoie pas de Bearer : on accepte aussi le cookie de session NextAuth.
 export const GET = route(async (request, ctx: RouteContext<"/api/media/[id]">) => {

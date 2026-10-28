@@ -34,6 +34,42 @@ async function exploreTiles(userId: string, visible: Prisma.PostWhereInput): Pro
   }));
 }
 
+/**
+ * @openapi
+ * /api/posts:
+ *   get:
+ *     tags: [Posts]
+ *     summary: Lister les posts
+ *     description: Les posts `closeFriends` d'un compte qui ne m'a pas dans son cercle proche sont masqués. Maximum 60. Avec `explore=1`, renvoie la mosaïque de la Recherche.
+ *     parameters:
+ *       - { name: author, in: query, required: false, schema: { type: string }, description: Id ou nom d'utilisateur }
+ *       - { name: type, in: query, required: false, schema: { type: string, enum: [reel, post] } }
+ *       - { name: saved, in: query, required: false, schema: { type: string, enum: ['1'] }, description: Mes posts enregistrés }
+ *       - { name: explore, in: query, required: false, schema: { type: string, enum: ['1'] }, description: Mosaïque de la Recherche (ExploreTile) }
+ *     responses:
+ *       '200': { description: Posts, du plus récent au plus ancien, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { oneOf: [{ $ref: '#/components/schemas/PostView' }, { $ref: '#/components/schemas/ExploreTile' }] } } } } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   post:
+ *     tags: [Posts]
+ *     summary: Publier une photo ou un reel
+ *     description: Le média (15 Mo maximum) est gardé dans MongoDB et servi par GET /api/media/{id}. Une vidéo crée un reel.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [media]
+ *             properties:
+ *               media: { type: string, format: binary, description: Image ou vidéo }
+ *               caption: { type: string, maxLength: 300 }
+ *     responses:
+ *       '201': { description: Post publié, content: { application/json: { schema: { allOf: [{ type: object, properties: { post: { $ref: '#/components/schemas/PostView' } } }, { $ref: '#/components/schemas/PointsResponse' }] } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ */
 // ?author=<id|username> · ?type=reel · ?saved=1 · ?explore=1 (mosaïque de la recherche)
 export const GET = route(async (request) => {
   const user = await requireUser(request);

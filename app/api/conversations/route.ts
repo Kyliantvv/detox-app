@@ -6,6 +6,17 @@ import { formatAgo } from "@/lib/server/format";
 import { json, route } from "@/lib/server/http";
 import { author } from "@/lib/server/views";
 
+/**
+ * @openapi
+ * /api/conversations:
+ *   get:
+ *     tags: [Messages]
+ *     summary: Mes conversations
+ *     description: Fils existants plus ceux amorcés par les comptes `bot`, du plus récent au plus ancien. L'id d'une conversation est celui de l'autre compte.
+ *     responses:
+ *       '200': { description: Conversations, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/ConversationItem' } } } } } } }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ */
 // Conversations : fils existants plus ceux amorcés par les comptes `bot`.
 export const GET = route(async (request) => {
   const user = await requireUser(request);

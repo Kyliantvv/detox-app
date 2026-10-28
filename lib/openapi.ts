@@ -1,10 +1,10 @@
-// Description OpenAPI 3.1 de l'API, servie par GET /api/openapi et affichée par Swagger UI sur /api/docs.
-// Pour l'instant : L'Épicerie, les tirages et la Clairvoyance. Chaque domaine ajoute ses routes dans `paths`.
+// Base de la description OpenAPI 3.1 : infos, tags, réponses et schémas partagés.
+// Les chemins ne sont pas ici : chaque `app/api/**/route.ts` porte son propre bloc `@openapi` (YAML dans un
+// commentaire JSDoc), et `pnpm openapi` (next-swagger-doc) assemble le tout dans lib/openapi.generated.json,
+// servi par GET /api/openapi et affiché par Swagger UI sur /api/docs.
 
 const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
 const jsonBody = (schema: object) => ({ content: { "application/json": { schema } } });
-const ok = (description: string, schema: object) => ({ description, ...jsonBody(schema) });
-const error = (name: string) => ({ $ref: `#/components/responses/${name}` });
 
 const errorResponse = (description: string, code: string) => ({
   description,
@@ -24,7 +24,7 @@ const SKILL_IDS = [
   "dossier-complet",
 ];
 
-export const openApiSpec = {
+export const openApiDefinition = {
   openapi: "3.1.0",
   info: {
     title: "Détox API",
@@ -35,156 +35,18 @@ export const openApiSpec = {
   servers: [{ url: "/" }],
   security: [{ bearerAuth: [] }],
   tags: [
+    { name: "Compte", description: "Inscription, connexion et profil du compte connecté" },
+    { name: "Comptes", description: "Recherche et profils publics" },
+    { name: "Abonnements", description: "Suivre et ne plus suivre un compte" },
+    { name: "Posts", description: "Publications, Bonnes doses, enregistrements, commentaires et médias" },
+    { name: "Fil", description: "Cercle, Flow et Reels recommandés, Instants" },
+    { name: "Messages", description: "Conversations et messages" },
     { name: "L'Épicerie", description: "Catalogue, achats et commandes" },
     { name: "Tirages", description: "Ticket à gratter : le serveur tire les cases, le client ne fait que gratter" },
     { name: "Clairvoyance", description: "Compétences d'espionnage d'un ami ; la cible n'est jamais notifiée" },
+    { name: "Fichiers", description: "Téléversement d'images (files-sdk)" },
+    { name: "Système", description: "Santé du service" },
   ],
-  paths: {
-    "/api/shop": {
-      get: {
-        tags: ["L'Épicerie"],
-        summary: "Catalogue de L'Épicerie",
-        security: [],
-        responses: { 200: ok("Les 4 articles", { type: "object", properties: { items: { type: "array", items: ref("ShopItem") } } }) },
-      },
-    },
-    "/api/orders": {
-      get: {
-        tags: ["L'Épicerie"],
-        summary: "Mes commandes, de la plus récente à la plus ancienne",
-        responses: {
-          200: ok("Commandes du compte connecté", { type: "object", properties: { items: { type: "array", items: ref("Order") } } }),
-          401: error("Unauthorized"),
-        },
-      },
-      post: {
-        tags: ["L'Épicerie"],
-        summary: "Acheter un article",
-        description: "Débite le prix, puis crée une commande, un ticket à gratter ou ouvre une loot box selon l'article.",
-        requestBody: {
-          required: true,
-          ...jsonBody({
-            type: "object",
-            required: ["itemId"],
-            additionalProperties: false,
-            properties: { itemId: { type: "string", enum: ["sucre", "ticket", "lootbox", "cigarettes"] } },
-          }),
-        },
-        responses: {
-          201: ok("Achat effectué", { allOf: [ref("Purchase"), ref("PointsResponse")] }),
-          400: error("InvalidInput"),
-          401: error("Unauthorized"),
-          404: error("NotFound"),
-          409: error("InsufficientPoints"),
-        },
-      },
-    },
-    "/api/orders/{id}": {
-      get: {
-        tags: ["L'Épicerie"],
-        summary: "Détail d'une commande et son suivi",
-        description: "Les étapes se valident avec le temps écoulé depuis l'achat . La commande d'un autre compte répond 404.",
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        responses: {
-          200: ok("La commande", { type: "object", properties: { order: ref("OrderDetail") } }),
-          400: error("InvalidInput"),
-          401: error("Unauthorized"),
-          404: error("NotFound"),
-        },
-      },
-    },
-    "/api/dice": {
-      post: {
-        tags: ["Tirages"],
-        summary: "Acheter un ticket à gratter",
-        description: "Remplace le ticket en cours. Les cases sont tirées ici ; les cases non grattées ne sont jamais envoyées.",
-        responses: {
-          201: ok("Ticket acheté", { allOf: [ref("Purchase"), ref("PointsResponse")] }),
-          401: error("Unauthorized"),
-          409: error("InsufficientPoints"),
-        },
-      },
-    },
-    "/api/ticket": {
-      get: {
-        tags: ["Tirages"],
-        summary: "Ticket en cours",
-        responses: {
-          200: ok("Le ticket, cases non grattées masquées", { type: "object", properties: { ticket: ref("TicketView") } }),
-          401: error("Unauthorized"),
-          404: error("NotFound"),
-        },
-      },
-    },
-    "/api/ticket/scratch": {
-      post: {
-        tags: ["Tirages"],
-        summary: "Gratter une case",
-        description: "Le gain est versé une seule fois, quand la dernière case est grattée.",
-        requestBody: {
-          required: true,
-          ...jsonBody({
-            type: "object",
-            required: ["index"],
-            additionalProperties: false,
-            properties: { index: { type: "integer", minimum: 0, maximum: 5 } },
-          }),
-        },
-        responses: {
-          200: ok("Ticket mis à jour", {
-            allOf: [{ type: "object", properties: { ticket: ref("TicketView") } }, ref("PointsResponse")],
-          }),
-          400: error("InvalidInput"),
-          401: error("Unauthorized"),
-          404: error("NotFound"),
-        },
-      },
-    },
-    "/api/skills": {
-      get: {
-        tags: ["Clairvoyance"],
-        summary: "Compétences disponibles sur une cible",
-        parameters: [{ name: "targetId", in: "query", required: true, schema: { type: "string" } }],
-        responses: {
-          200: ok("Catalogue et informations déjà débloquées", {
-            type: "object",
-            properties: { items: { type: "array", items: ref("SkillView") }, intel: ref("Intel") },
-          }),
-          400: error("InvalidInput"),
-          401: error("Unauthorized"),
-          404: error("NotFound"),
-          409: error("TargetShielded"),
-        },
-      },
-    },
-    "/api/skills/{skillId}": {
-      post: {
-        tags: ["Clairvoyance"],
-        summary: "Acheter une compétence sur une cible",
-        description: "Achat unique par cible : une compétence déjà possédée n'est pas débitée une seconde fois. « dossier-complet » débloque tout.",
-        parameters: [{ name: "skillId", in: "path", required: true, schema: { type: "string", enum: SKILL_IDS } }],
-        requestBody: {
-          required: true,
-          ...jsonBody({ type: "object", required: ["targetId"], additionalProperties: false, properties: { targetId: { type: "string" } } }),
-        },
-        responses: {
-          200: ok("Compétences possédées et informations révélées", {
-            type: "object",
-            properties: {
-              owned: { type: "array", items: { type: "string", enum: SKILL_IDS } },
-              intel: ref("Intel"),
-              points: { type: "integer" },
-              events: { type: "array", items: ref("PointEvent") },
-            },
-          }),
-          400: error("InvalidInput"),
-          401: error("Unauthorized"),
-          404: error("NotFound"),
-          409: error("InsufficientPoints"),
-        },
-      },
-    },
-  },
   components: {
     securitySchemes: {
       bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT", description: "Token renvoyé par POST /api/auth/login" },
@@ -203,6 +65,113 @@ export const openApiSpec = {
         properties: {
           error: { type: "object", required: ["code", "message"], properties: { code: { type: "string" }, message: { type: "string" } } },
         },
+      },
+      AuthUser: {
+        type: "object",
+        properties: { id: { type: "string" }, email: { type: "string" }, username: { type: "string" } },
+      },
+      AuthResponse: {
+        allOf: [
+          { type: "object", properties: { user: ref("AuthUser"), token: { type: "string", description: "JWT à envoyer en Bearer" } } },
+          ref("PointsResponse"),
+        ],
+      },
+      PostAuthor: {
+        type: "object",
+        properties: { id: { type: "string" }, username: { type: "string" }, name: { type: "string" } },
+      },
+      PublicUser: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          username: { type: "string" },
+          name: { type: "string" },
+          bio: { type: "string" },
+          status: { type: "string", description: "Calculé depuis la dernière activité" },
+          level: { type: "integer" },
+          hasInstant: { type: "boolean" },
+          shielded: { type: "boolean" },
+          followers: { type: "integer" },
+          following: { type: "integer" },
+          followedByMe: { type: "boolean" },
+        },
+      },
+      Me: { allOf: [ref("PublicUser"), { type: "object", properties: { email: { type: "string" } } }] },
+      Stats: {
+        type: "object",
+        properties: {
+          points: { type: "integer" },
+          totalEarned: { type: "integer" },
+          totalSpent: { type: "integer" },
+          bestGain: { type: "integer" },
+          earnedToday: { type: "integer" },
+          streak: { type: "integer" },
+          serenity: { type: "integer" },
+          level: { type: "integer" },
+          flowPagesRead: { type: "integer" },
+          dosesGiven: { type: "integer" },
+          orders: { type: "integer" },
+          friendsSpied: { type: "integer" },
+          timeSpentMs: { type: "integer" },
+          events: { type: "array", items: ref("PointEvent") },
+        },
+      },
+      Comment: { type: "object", properties: { author: { type: "string", description: "Nom d'utilisateur" }, text: { type: "string" } } },
+      PostView: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          authorId: { type: "string" },
+          author: { oneOf: [ref("PostAuthor"), { type: "null" }] },
+          location: { type: "string" },
+          ago: { type: "string" },
+          art: { type: "string", description: "Visuel de repli quand il n'y a pas de média" },
+          caption: { type: "string" },
+          doses: { type: "integer", description: "Bonnes doses" },
+          comments: { type: "array", items: ref("Comment") },
+          isReel: { type: "boolean" },
+          imageUrl: { type: "string" },
+          videoUrl: { type: "string" },
+          dosedByMe: { type: "boolean" },
+          savedByMe: { type: "boolean" },
+          reason: { type: "string", description: "Flow et Reels : pourquoi l'algorithme de recommandation a choisi ce post" },
+        },
+      },
+      ExploreTile: {
+        type: "object",
+        properties: { id: { type: "string" }, art: { type: "string" }, tags: { type: "array", items: { type: "string" } } },
+      },
+      StoryItem: {
+        allOf: [
+          ref("PostAuthor"),
+          {
+            type: "object",
+            properties: {
+              instant: {
+                oneOf: [
+                  { type: "object", properties: { art: { type: "string" }, text: { type: "string" }, ago: { type: "string" } } },
+                  { type: "null" },
+                ],
+              },
+            },
+          },
+        ],
+      },
+      ConversationItem: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Id de l'autre compte" },
+          user: ref("PostAuthor"),
+          preview: { type: "string" },
+          fromMe: { type: "boolean" },
+          ago: { type: "string" },
+          at: { type: "integer" },
+          unread: { type: "boolean" },
+        },
+      },
+      ChatMessage: {
+        type: "object",
+        properties: { id: { type: "string" }, from: { type: "string", enum: ["me", "them"] }, text: { type: "string" }, at: { type: "integer" } },
       },
       ShopItem: {
         type: "object",

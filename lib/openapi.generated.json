@@ -1,0 +1,2491 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Détox API",
+    "version": "1.0.0",
+    "description": "API de Détox, le réseau social qui récompense chaque geste. Les montants de points sont toujours calculés par le serveur."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Compte",
+      "description": "Inscription, connexion et profil du compte connecté"
+    },
+    {
+      "name": "Comptes",
+      "description": "Recherche et profils publics"
+    },
+    {
+      "name": "Abonnements",
+      "description": "Suivre et ne plus suivre un compte"
+    },
+    {
+      "name": "Posts",
+      "description": "Publications, Bonnes doses, enregistrements, commentaires et médias"
+    },
+    {
+      "name": "Fil",
+      "description": "Cercle, Flow et Reels recommandés, Instants"
+    },
+    {
+      "name": "Messages",
+      "description": "Conversations et messages"
+    },
+    {
+      "name": "L'Épicerie",
+      "description": "Catalogue, achats et commandes"
+    },
+    {
+      "name": "Tirages",
+      "description": "Ticket à gratter : le serveur tire les cases, le client ne fait que gratter"
+    },
+    {
+      "name": "Clairvoyance",
+      "description": "Compétences d'espionnage d'un ami ; la cible n'est jamais notifiée"
+    },
+    {
+      "name": "Fichiers",
+      "description": "Téléversement d'images (files-sdk)"
+    },
+    {
+      "name": "Système",
+      "description": "Santé du service"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Token renvoyé par POST /api/auth/login"
+      }
+    },
+    "responses": {
+      "InvalidInput": {
+        "description": "Corps, champ ou identifiant invalide",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error",
+              "example": {
+                "error": {
+                  "code": "INVALID_INPUT",
+                  "message": "Message lisible"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Token absent, invalide ou expiré",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error",
+              "example": {
+                "error": {
+                  "code": "UNAUTHORIZED",
+                  "message": "Message lisible"
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Objet absent ou appartenant à un autre compte",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error",
+              "example": {
+                "error": {
+                  "code": "NOT_FOUND",
+                  "message": "Message lisible"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InsufficientPoints": {
+        "description": "Solde insuffisant : rien n'est débité",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error",
+              "example": {
+                "error": {
+                  "code": "INSUFFICIENT_POINTS",
+                  "message": "Message lisible"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TargetShielded": {
+        "description": "Cible protégée par un bouclier",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error",
+              "example": {
+                "error": {
+                  "code": "TARGET_SHIELDED",
+                  "message": "Message lisible"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "AuthUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "AuthResponse": {
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/AuthUser"
+              },
+              "token": {
+                "type": "string",
+                "description": "JWT à envoyer en Bearer"
+              }
+            }
+          },
+          {
+            "$ref": "#/components/schemas/PointsResponse"
+          }
+        ]
+      },
+      "PostAuthor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PublicUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "Calculé depuis la dernière activité"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "hasInstant": {
+            "type": "boolean"
+          },
+          "shielded": {
+            "type": "boolean"
+          },
+          "followers": {
+            "type": "integer"
+          },
+          "following": {
+            "type": "integer"
+          },
+          "followedByMe": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Me": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PublicUser"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "Stats": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "type": "integer"
+          },
+          "totalEarned": {
+            "type": "integer"
+          },
+          "totalSpent": {
+            "type": "integer"
+          },
+          "bestGain": {
+            "type": "integer"
+          },
+          "earnedToday": {
+            "type": "integer"
+          },
+          "streak": {
+            "type": "integer"
+          },
+          "serenity": {
+            "type": "integer"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "flowPagesRead": {
+            "type": "integer"
+          },
+          "dosesGiven": {
+            "type": "integer"
+          },
+          "orders": {
+            "type": "integer"
+          },
+          "friendsSpied": {
+            "type": "integer"
+          },
+          "timeSpentMs": {
+            "type": "integer"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PointEvent"
+            }
+          }
+        }
+      },
+      "Comment": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "type": "string",
+            "description": "Nom d'utilisateur"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "PostView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "authorId": {
+            "type": "string"
+          },
+          "author": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PostAuthor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "location": {
+            "type": "string"
+          },
+          "ago": {
+            "type": "string"
+          },
+          "art": {
+            "type": "string",
+            "description": "Visuel de repli quand il n'y a pas de média"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "doses": {
+            "type": "integer",
+            "description": "Bonnes doses"
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            }
+          },
+          "isReel": {
+            "type": "boolean"
+          },
+          "imageUrl": {
+            "type": "string"
+          },
+          "videoUrl": {
+            "type": "string"
+          },
+          "dosedByMe": {
+            "type": "boolean"
+          },
+          "savedByMe": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Flow et Reels : pourquoi l'algorithme de recommandation a choisi ce post"
+          }
+        }
+      },
+      "ExploreTile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "art": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "StoryItem": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PostAuthor"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "instant": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "art": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "ago": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ConversationItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de l'autre compte"
+          },
+          "user": {
+            "$ref": "#/components/schemas/PostAuthor"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "fromMe": {
+            "type": "boolean"
+          },
+          "ago": {
+            "type": "string"
+          },
+          "at": {
+            "type": "integer"
+          },
+          "unread": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ChatMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "enum": [
+              "me",
+              "them"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "at": {
+            "type": "integer"
+          }
+        }
+      },
+      "ShopItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "sucre",
+              "ticket",
+              "lootbox",
+              "cigarettes"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "integer",
+            "description": "En points"
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "order",
+              "ticket",
+              "lootbox"
+            ]
+          }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "itemName": {
+            "type": "string"
+          },
+          "price": {
+            "type": "integer"
+          },
+          "tracking": {
+            "type": "string",
+            "example": "DTX-123456-FR"
+          },
+          "address": {
+            "type": "string",
+            "description": "Adresse de livraison"
+          },
+          "at": {
+            "type": "integer",
+            "description": "Date d'achat, en millisecondes"
+          }
+        }
+      },
+      "TrackingStep": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null tant que la livraison n'a pas de date"
+          },
+          "done": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OrderDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Order"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "steps": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TrackingStep"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TicketView": {
+        "type": "object",
+        "properties": {
+          "cells": {
+            "type": "array",
+            "items": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "description": "null tant que la case n'est pas grattée"
+          },
+          "revealed": {
+            "type": "array",
+            "items": {
+              "type": "boolean"
+            }
+          },
+          "paidOut": {
+            "type": "boolean"
+          },
+          "winnings": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "Purchase": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "order"
+              },
+              "order": {
+                "$ref": "#/components/schemas/Order"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "ticket"
+              },
+              "ticket": {
+                "$ref": "#/components/schemas/TicketView"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "lootbox"
+              },
+              "prize": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "PointEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          },
+          "at": {
+            "type": "integer"
+          }
+        }
+      },
+      "PointsResponse": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "type": "integer",
+            "description": "Nouveau solde"
+          },
+          "gains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PointEvent"
+            }
+          }
+        }
+      },
+      "SkillView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "derniere-connexion",
+              "solde",
+              "serie",
+              "temps-scroll",
+              "derniers-achats",
+              "visites-profil",
+              "plus-gros-gain",
+              "heures-pointe",
+              "cercle-proche",
+              "dossier-complet"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "shows": {
+            "type": "string"
+          },
+          "price": {
+            "type": "integer"
+          },
+          "owned": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Intel": {
+        "type": "object",
+        "description": "Informations débloquées, par compétence (métadonnées seulement, jamais de contenu)",
+        "additionalProperties": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/users": {
+      "get": {
+        "tags": [
+          "Comptes"
+        ],
+        "summary": "Rechercher des comptes",
+        "description": "Par nom d'utilisateur ou prénom. Sans `q`, les comptes suivis d'abord (cibles de la Clairvoyance). Maximum 50.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comptes trouvés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PublicUser"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/users/{username}": {
+      "get": {
+        "tags": [
+          "Comptes"
+        ],
+        "summary": "Profil public d'un compte",
+        "description": "Compte une visite de profil, ce qui alimente la compétence « Visites de profil ».",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le profil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/PublicUser"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/ticket": {
+      "get": {
+        "tags": [
+          "Tirages"
+        ],
+        "summary": "Ticket en cours",
+        "responses": {
+          "200": {
+            "description": "Le ticket, cases non grattées masquées",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {
+                      "$ref": "#/components/schemas/TicketView"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/ticket/scratch": {
+      "post": {
+        "tags": [
+          "Tirages"
+        ],
+        "summary": "Gratter une case",
+        "description": "Le gain est versé une seule fois, quand la dernière case est grattée.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "index"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 5
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ticket mis à jour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ticket": {
+                          "$ref": "#/components/schemas/TicketView"
+                        }
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/PointsResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/stories": {
+      "get": {
+        "tags": [
+          "Fil"
+        ],
+        "summary": "Instants des comptes suivis",
+        "description": "Comptes suivis avec leur Instant de moins de 24 h ; ceux qui en ont un d'abord.",
+        "responses": {
+          "200": {
+            "description": "Comptes et Instants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StoryItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/skills": {
+      "get": {
+        "tags": [
+          "Clairvoyance"
+        ],
+        "summary": "Compétences disponibles sur une cible",
+        "parameters": [
+          {
+            "name": "targetId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Catalogue et informations déjà débloquées",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SkillView"
+                      }
+                    },
+                    "intel": {
+                      "$ref": "#/components/schemas/Intel"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/TargetShielded"
+          }
+        }
+      }
+    },
+    "/api/skills/{skillId}": {
+      "post": {
+        "tags": [
+          "Clairvoyance"
+        ],
+        "summary": "Acheter une compétence sur une cible",
+        "description": "Achat unique par cible : une compétence déjà possédée n'est pas débitée une seconde fois. « dossier-complet » débloque tout.",
+        "parameters": [
+          {
+            "name": "skillId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "derniere-connexion",
+                "solde",
+                "serie",
+                "temps-scroll",
+                "derniers-achats",
+                "visites-profil",
+                "plus-gros-gain",
+                "heures-pointe",
+                "cercle-proche",
+                "dossier-complet"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "targetId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "targetId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Compétences possédées et informations révélées",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "owned": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "derniere-connexion",
+                          "solde",
+                          "serie",
+                          "temps-scroll",
+                          "derniers-achats",
+                          "visites-profil",
+                          "plus-gros-gain",
+                          "heures-pointe",
+                          "cercle-proche",
+                          "dossier-complet"
+                        ]
+                      }
+                    },
+                    "intel": {
+                      "$ref": "#/components/schemas/Intel"
+                    },
+                    "points": {
+                      "type": "integer"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PointEvent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/InsufficientPoints"
+          }
+        }
+      }
+    },
+    "/api/shop": {
+      "get": {
+        "tags": [
+          "L'Épicerie"
+        ],
+        "summary": "Catalogue de L'Épicerie",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Les 4 articles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ShopItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/posts": {
+      "get": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Lister les posts",
+        "description": "Les posts `closeFriends` d'un compte qui ne m'a pas dans son cercle proche sont masqués. Maximum 60. Avec `explore=1`, renvoie la mosaïque de la Recherche.",
+        "parameters": [
+          {
+            "name": "author",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Id ou nom d'utilisateur"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "reel",
+                "post"
+              ]
+            }
+          },
+          {
+            "name": "saved",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Mes posts enregistrés"
+          },
+          {
+            "name": "explore",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Mosaïque de la Recherche (ExploreTile)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Posts",
+            "du plus récent au plus ancien": null,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "$ref": "#/components/schemas/PostView"
+                          },
+                          {
+                            "$ref": "#/components/schemas/ExploreTile"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Publier une photo ou un reel",
+        "description": "Le média (15 Mo maximum) est gardé dans MongoDB et servi par GET /api/media/{id}. Une vidéo crée un reel.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "media"
+                ],
+                "properties": {
+                  "media": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Image ou vidéo"
+                  },
+                  "caption": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Post publié",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "post": {
+                          "$ref": "#/components/schemas/PostView"
+                        }
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/PointsResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/posts/{id}/saves": {
+      "post": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Enregistrer un post",
+        "description": "Idempotent.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post enregistré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "savedByMe": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Retirer un post de mes enregistrements",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enregistrement retiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "savedByMe": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/posts/{id}/likes": {
+      "post": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Donner une Bonne dose",
+        "description": "Idempotent, les points ne sont crédités qu'à la première.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compteur à jour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "doses": {
+                          "type": "integer"
+                        },
+                        "dosedByMe": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/PointsResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Retirer ma Bonne dose",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compteur à jour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "doses": {
+                      "type": "integer"
+                    },
+                    "dosedByMe": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/posts/{id}/comments": {
+      "get": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Commentaires d'un post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Commentaires",
+            "du plus ancien au plus récent": null,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Comment"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Commenter un post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "text"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Commentaire ajouté",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "comment": {
+                          "$ref": "#/components/schemas/Comment"
+                        }
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/PointsResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orders": {
+      "get": {
+        "tags": [
+          "L'Épicerie"
+        ],
+        "summary": "Mes commandes, de la plus récente à la plus ancienne",
+        "responses": {
+          "200": {
+            "description": "Commandes du compte connecté",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "L'Épicerie"
+        ],
+        "summary": "Acheter un article",
+        "description": "Débite le prix, puis crée une commande, un ticket à gratter ou ouvre une loot box selon l'article.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "itemId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "itemId": {
+                    "type": "string",
+                    "enum": [
+                      "sucre",
+                      "ticket",
+                      "lootbox",
+                      "cigarettes"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Achat effectué",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Purchase"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PointsResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/InsufficientPoints"
+          }
+        }
+      }
+    },
+    "/api/orders/{id}": {
+      "get": {
+        "tags": [
+          "L'Épicerie"
+        ],
+        "summary": "Détail d'une commande et son suivi",
+        "description": "Les étapes se valident avec le temps écoulé depuis l'achat . La commande d'un autre compte répond 404.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "La commande",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "$ref": "#/components/schemas/OrderDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/media/{id}": {
+      "get": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Fichier d'un post",
+        "description": "Accepte le Bearer ou le cookie de session NextAuth, parce qu'une balise `<img>` n'envoie pas de Bearer.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le fichier",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "video/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "tags": [
+          "Compte"
+        ],
+        "summary": "Mon profil et mes statistiques",
+        "description": "Source du solde, de la série et des stats.",
+        "responses": {
+          "200": {
+            "description": "Le compte connecté",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/Me"
+                    },
+                    "stats": {
+                      "$ref": "#/components/schemas/Stats"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Compte"
+        ],
+        "summary": "Modifier ma bio",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {
+                  "bio": {
+                    "type": "string",
+                    "maxLength": 160
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Compte mis à jour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/AuthUser"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "Système"
+        ],
+        "summary": "État du service",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Le service répond",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/follows": {
+      "get": {
+        "tags": [
+          "Abonnements"
+        ],
+        "summary": "Ids des comptes que je suis",
+        "responses": {
+          "200": {
+            "description": "Ids suivis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Abonnements"
+        ],
+        "summary": "Suivre un compte",
+        "description": "Idempotent.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "targetId"
+                ],
+                "properties": {
+                  "targetId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ids suivis après l'abonnement",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/follows/{targetId}": {
+      "delete": {
+        "tags": [
+          "Abonnements"
+        ],
+        "summary": "Ne plus suivre un compte",
+        "parameters": [
+          {
+            "name": "targetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ids suivis après le désabonnement",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/files": {
+      "get": {
+        "tags": [
+          "Fichiers"
+        ],
+        "summary": "URL d'un fichier téléversé",
+        "description": "Géré par files-sdk (UploadThing). Images uniquement, 4 Mo maximum. Pas encore relié aux posts.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Réponse du routeur files-sdk"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Fichiers"
+        ],
+        "summary": "Préparer un téléversement",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Réponse du routeur files-sdk"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Fichiers"
+        ],
+        "summary": "Téléverser un fichier",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Réponse du routeur files-sdk"
+          }
+        }
+      }
+    },
+    "/api/feed/reels": {
+      "get": {
+        "tags": [
+          "Fil"
+        ],
+        "summary": "Reels recommandés",
+        "description": "Les 100 reels les plus récents, triés par l'algorithme de recommandation, chacun avec sa `reason`.",
+        "responses": {
+          "200": {
+            "description": "Reels triés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PostView"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/feed/flow": {
+      "get": {
+        "tags": [
+          "Fil"
+        ],
+        "summary": "Page du Flow",
+        "description": "Infini. Les posts sont choisis par l'algorithme de recommandation (goûts de l'utilisateur, popularité, une surprise) et chacun porte sa `reason`. Chaque page crédite des points une seule fois ; la relire renvoie les mêmes posts.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page du Flow",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/PostView"
+                          }
+                        },
+                        "page": {
+                          "type": "integer"
+                        },
+                        "nextPage": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "serenity": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/PointsResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/feed/circle": {
+      "get": {
+        "tags": [
+          "Fil"
+        ],
+        "summary": "Mon cercle",
+        "description": "Photos des comptes suivis et les miennes, du plus récent au plus ancien (50 au plus).",
+        "responses": {
+          "200": {
+            "description": "Posts du cercle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PostView"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/dice": {
+      "post": {
+        "tags": [
+          "Tirages"
+        ],
+        "summary": "Acheter un ticket à gratter",
+        "description": "Remplace le ticket en cours. Les cases sont tirées ici ; les cases non grattées ne sont jamais envoyées.",
+        "responses": {
+          "201": {
+            "description": "Ticket acheté",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Purchase"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PointsResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/InsufficientPoints"
+          }
+        }
+      }
+    },
+    "/api/conversations": {
+      "get": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Mes conversations",
+        "description": "Fils existants plus ceux amorcés par les comptes `bot`, du plus récent au plus ancien. L'id d'une conversation est celui de l'autre compte.",
+        "responses": {
+          "200": {
+            "description": "Conversations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConversationItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/conversations/{id}/messages": {
+      "get": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Messages d'une conversation",
+        "description": "Lu en polling. Marque comme lus les messages reçus. Les réponses programmées des bots n'apparaissent qu'une fois leur heure passée.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Id de l'autre compte"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Messages",
+            "du plus ancien au plus récent": null,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/PublicUser"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ChatMessage"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Envoyer un message",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Id de l'autre compte"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "text"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Message envoyé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "$ref": "#/components/schemas/ChatMessage"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Compte"
+        ],
+        "summary": "Créer un compte",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "email",
+                  "username",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "username": {
+                    "type": "string",
+                    "description": "3 à 30 caractères : lettres, chiffres, points ou _"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Compte créé et connecté",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "409": {
+            "description": "E-mail ou nom d'utilisateur déjà pris (EMAIL_ALREADY_USED",
+            "USERNAME_ALREADY_USED)": null,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Compte"
+        ],
+        "summary": "Se connecter",
+        "description": "Renvoie le JWT à passer en Bearer sur les autres routes. Ouvre aussi la série du jour.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Connexion réussie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  }
+}

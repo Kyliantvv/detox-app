@@ -5,6 +5,42 @@ import { SKILL_CATALOG } from "@/lib/server/content";
 import { ApiError, json, route } from "@/lib/server/http";
 import { assertTarget, ownedSkills, unlockedIntel } from "@/lib/server/shop";
 
+/**
+ * @openapi
+ * /api/skills:
+ *   get:
+ *     tags:
+ *       - Clairvoyance
+ *     summary: Compétences disponibles sur une cible
+ *     parameters:
+ *       - name: targetId
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       '200':
+ *         description: Catalogue et informations déjà débloquées
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/SkillView'
+ *                 intel:
+ *                   $ref: '#/components/schemas/Intel'
+ *       '400':
+ *         $ref: '#/components/responses/InvalidInput'
+ *       '401':
+ *         $ref: '#/components/responses/Unauthorized'
+ *       '404':
+ *         $ref: '#/components/responses/NotFound'
+ *       '409':
+ *         $ref: '#/components/responses/TargetShielded'
+ */
 // Catalogue de la Clairvoyance pour une cible, avec ce qui est déjà débloqué.
 export const GET = route(async (request) => {
   const user = await requireUser(request);

@@ -11,6 +11,31 @@ const doses = async (postId: string) => {
   return post.baseLikes + post.likesCount;
 };
 
+/**
+ * @openapi
+ * /api/posts/{id}/likes:
+ *   post:
+ *     tags: [Posts]
+ *     summary: Donner une Bonne dose
+ *     description: Idempotent, les points ne sont crédités qu'à la première.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       '200': { description: Compteur à jour, content: { application/json: { schema: { allOf: [{ type: object, properties: { doses: { type: integer }, dosedByMe: { type: boolean } } }, { $ref: '#/components/schemas/PointsResponse' }] } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *   delete:
+ *     tags: [Posts]
+ *     summary: Retirer ma Bonne dose
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       '200': { description: Compteur à jour, content: { application/json: { schema: { type: object, properties: { doses: { type: integer }, dosedByMe: { type: boolean } } } } } }
+ *       '400': { $ref: '#/components/responses/InvalidInput' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ */
 // Bonne dose : idempotente, les points ne sont crédités qu'à la première.
 export const POST = route(async (request, ctx: Ctx) => {
   const { user, post } = await userAndPost(request, ctx.params);

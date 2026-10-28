@@ -4,6 +4,20 @@ import { ApiError, assertId, json, route } from "@/lib/server/http";
 import { recordProfileView } from "@/lib/server/shop";
 import { publicUser } from "@/lib/server/views";
 
+/**
+ * @openapi
+ * /api/users/{username}:
+ *   get:
+ *     tags: [Comptes]
+ *     summary: Profil public d'un compte
+ *     description: Compte une visite de profil, ce qui alimente la compétence « Visites de profil ».
+ *     parameters:
+ *       - { name: username, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       '200': { description: Le profil, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/PublicUser' } } } } } }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ */
 export const GET = route(async (request, ctx: RouteContext<"/api/users/[username]">) => {
   const user = await requireUser(request);
   const { username } = await ctx.params;

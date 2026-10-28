@@ -21,6 +21,7 @@ pnpm dev                      # serveur de dev
 pnpm build                    # build de prod (fait aussi le typecheck)
 pnpm exec next start -p 3123  # servir le build
 pnpm lint                     # ESLint (règles type-aware sur les promesses, react-you-might-not-need-an-effect en erreur)
+pnpm openapi                  # régénère lib/openapi.generated.json depuis les blocs @openapi des routes (aussi lancé par prebuild)
 pnpm typecheck                # next typegen (types RouteContext/PageProps) puis tsc ; à relancer après ajout d'une route
 pnpm test                     # Vitest, une passe (pnpm test:watch pour le mode watch)
 pnpm exec vitest run app/api/posts        # un dossier ou un fichier
@@ -97,6 +98,7 @@ export const POST = route(async (request, ctx: RouteContext<"/api/x/[id]">) => {
   - `credit(userId, amount, type, label, { combo? })` et `debit()` passent par `creditPoints`/`spendPoints` ;
   - `debit()` lève `INSUFFICIENT_POINTS` avec le montant manquant ;
   - les actions qui rapportent des points renvoient `withPoints()`, soit `{points, gains}`.
+- Documentation OpenAPI : chaque `route.ts` porte un bloc JSDoc `@openapi` (YAML, sans ancres `&`/`*`) pour ses chemins ; `lib/openapi.ts` ne garde que les infos, tags, réponses et schémas partagés. `next-swagger-doc` (`scripts/openapi-spec.ts`) assemble le tout dans `lib/openapi.generated.json`, versionné et servi par `GET /api/openapi` (Swagger UI sur `/api/docs`). Après avoir ajouté ou changé une route, lancer `pnpm openapi` : un test échoue si le fichier est périmé ou si une route n'est pas documentée.
 - `lib/server/views.ts` met en forme les documents (`publicUser`, `postViews` en lot, `stats`) : ids publics seulement, jamais de hash.
 - `lib/server/posts.ts` : `visibleWhere(viewerId)` cache les posts `closeFriends` hors du cercle proche ; `userAndPost()` répond 404 pour un post invisible.
 - Le Flow tire chaque page d'une réserve de photos récentes (il repart du début quand il n'y en a plus) et la mémorise dans `FlowPage` pour la relire à l'identique.
