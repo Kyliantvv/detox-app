@@ -99,7 +99,7 @@ export default function GamesPage() {
                 <button
                   key={index}
                   type="button"
-                  onClick={() => scratchCell(index)}
+                  onClick={() => void scratchCell(index)}
                   className="scratch grid aspect-square place-items-center rounded-2xl border border-line font-semibold transition-transform active:scale-95"
                   aria-label={`Gratter la case ${index + 1}`}
                 >
@@ -125,7 +125,7 @@ export default function GamesPage() {
         <button
           type="button"
           className="btn-sun"
-          onClick={() => scratchCell(ticket.revealed.findIndex((revealed) => !revealed))}
+          onClick={() => void scratchCell(ticket.revealed.findIndex((revealed) => !revealed))}
         >
           {remaining === 1 ? "Gratter la dernière case" : "Gratter une case"}
         </button>
@@ -133,7 +133,7 @@ export default function GamesPage() {
       <button
         type="button"
         className={ticket && remaining > 0 ? "btn-ghost" : "btn-sun"}
-        onClick={newTicket}
+        onClick={() => void newTicket()}
         disabled={!!ticket && remaining > 0}
       >
         Nouveau ticket · {TICKET_PRICE} pts

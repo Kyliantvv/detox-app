@@ -112,7 +112,7 @@ export default function PostCard({ post }: { post: PostView }) {
         </button>
       </header>
 
-      <div className="relative aspect-square select-none" onDoubleClick={() => !dosed && toggle()}>
+      <div className="relative aspect-square select-none" onDoubleClick={() => !dosed && void toggle()}>
         <PostMedia post={post} />
         {!dosed && (
           <span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full border border-lime bg-ink/80 px-2.5 py-1 text-xs font-semibold text-lime">
@@ -124,7 +124,7 @@ export default function PostCard({ post }: { post: PostView }) {
       <div className="flex items-center gap-4 px-4 pt-3">
         <button
           type="button"
-          onClick={toggle}
+          onClick={() => void toggle()}
           aria-pressed={dosed}
           aria-label={dosed ? "Retirer la Bonne dose" : "Donner une Bonne dose"}
           className={dosed ? "animate-pop text-pink" : "text-fg"}
@@ -144,7 +144,7 @@ export default function PostCard({ post }: { post: PostView }) {
         </Link>
         <button
           type="button"
-          onClick={toggleSave}
+          onClick={() => void toggleSave()}
           aria-pressed={saved}
           aria-label={saved ? "Retirer des enregistrements" : "Enregistrer"}
           className="ml-auto"
@@ -165,7 +165,7 @@ export default function PostCard({ post }: { post: PostView }) {
           </p>
         ))}
         {commenting && (
-          <form onSubmit={submitComment} className="mt-2 flex gap-2">
+          <form onSubmit={(event) => void submitComment(event)} className="mt-2 flex gap-2">
             <label htmlFor={`comment-${post.id}`} className="sr-only">
               Ton commentaire
             </label>

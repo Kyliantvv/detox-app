@@ -68,7 +68,7 @@ export default function PublishPage() {
       <BackLink href="/" label="Accueil" />
       <h1 className="font-display text-[28px] font-bold">Publier</h1>
 
-      <form onSubmit={submit} className="flex flex-col gap-4">
+      <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
         <label className="card flex aspect-square cursor-pointer flex-col items-center justify-center gap-3 overflow-hidden text-muted">
           {preview ? (
             isVideo ? (

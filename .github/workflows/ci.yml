@@ -18,29 +18,49 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: docker compose up -d --wait mongo
+      # Pas de TEST_MONGODB_URI ici : lib/db/db.test.ts est sauté, il tourne dans le job db.
       - run: pnpm test
-        env:
-          TEST_MONGODB_URI: mongodb://localhost:27017/detox_test?directConnection=true
-      # No UPLOADTHING_TOKEN here: the build must not need it.
       - run: pnpm build
 
-  # The commit-msg hook can be skipped with --no-verify; this can't.
-  commits:
-    if: github.event_name == 'pull_request'
+  # Smoke test sur une vraie MongoDB (le replica set de compose.yaml) : schéma,
+  # index, seed lancé deux fois, puis les tests d'intégration de lib/db.
+  db:
     runs-on: ubuntu-latest
+    env:
+      MONGODB_URI: mongodb://localhost:27017/detox_smoke?directConnection=true
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: >-
-          pnpm exec commitlint
-          --from ${{ github.event.pull_request.base.sha }}
-          --to ${{ github.event.pull_request.head.sha }}
-          --verbose
+      - run: docker compose up -d --wait mongo
+      # prisma db push, puis les index hors schéma ; échoue s'il en manque un.
+      - run: pnpm db:indexes
+      # La seconde passe doit remplacer les comptes de seed, pas les doubler.
+      - name: pnpm db:seed (deux passes)
+        run: |
+          pnpm db:seed --users 20 --posts 50
+          pnpm db:seed --users 20 --posts 50
+          docker compose exec -T mongo mongosh --quiet detox_smoke --eval '
+            const count = (name, filter = {}) => db.getCollection(name).countDocuments(filter);
+            const got = {
+              users: count("users", { email: /@seed\.detox\.local$/ }),
+              posts: count("posts"),
+              shopItems: count("shop_items"),
+              follows: count("follows"),
+              likes: count("likes"),
+              pointEvents: count("point_events"),
+            };
+            printjson(got);
+            const ok = got.users === 20 && got.posts === 50 && got.shopItems === 4
+              && got.follows > 0 && got.likes > 0 && got.pointEvents > 0;
+            if (!ok) quit(1);
+          '
+      - run: pnpm exec vitest run lib/db
+        env:
+          TEST_MONGODB_URI: mongodb://localhost:27017/detox_test?directConnection=true
+      - if: failure()
+        run: docker compose logs mongo

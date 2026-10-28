@@ -35,7 +35,7 @@ function Reel({ reel }: { reel: PostView }) {
 
   return (
     <section className="relative h-full snap-start" aria-label={`Reel de ${username}`}>
-      <div className="absolute inset-0 overflow-hidden" onDoubleClick={() => !dosed && toggle()}>
+      <div className="absolute inset-0 overflow-hidden" onDoubleClick={() => !dosed && void toggle()}>
         <div className="h-full w-full motion-safe:animate-[reel-zoom_8s_ease-in-out_infinite_alternate]">
           <PostMedia post={reel} />
         </div>
@@ -52,7 +52,7 @@ function Reel({ reel }: { reel: PostView }) {
           <div className="flex flex-col items-center gap-4 text-xs font-semibold">
             <button
               type="button"
-              onClick={toggle}
+              onClick={() => void toggle()}
               aria-pressed={dosed}
               aria-label="Bonne dose"
               className={`flex flex-col items-center gap-1 ${dosed ? "text-pink" : ""}`}
