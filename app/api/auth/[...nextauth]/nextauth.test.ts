@@ -8,6 +8,7 @@ import * as me from "../../me/route";
 import { GET, POST } from "./route";
 
 const BASE = "http://localhost/api/auth";
+const ALEX = { email: "alex@detox.test", password: "demo1234" };
 
 // Garde les cookies posés par NextAuth d'une requête à l'autre, comme un navigateur.
 function browser() {
@@ -26,7 +27,7 @@ function browser() {
 
   return {
     cookies,
-    async signIn(provider: "credentials" | "demo", fields: Record<string, string> = {}) {
+    async signIn(provider: "credentials", fields: Record<string, string> = {}) {
       const { csrfToken } = (await (await send(GET, "/csrf")).json()) as { csrfToken: string };
       return send(POST, `/callback/${provider}`, {
         method: "POST",
@@ -41,10 +42,10 @@ function browser() {
 }
 
 describe("NextAuth", () => {
-  it("expose les providers credentials et démo", async () => {
+  it("expose le provider credentials", async () => {
     const response = await GET(new NextRequest(`${BASE}/providers`));
 
-    expect(Object.keys((await response.json()) as object)).toEqual(["credentials", "demo"]);
+    expect(Object.keys((await response.json()) as object)).toEqual(["credentials"]);
   });
 
   it("ouvre une session avec e-mail et mot de passe", async () => {
@@ -61,7 +62,7 @@ describe("NextAuth", () => {
 
   it("fournit un accessToken accepté en Bearer par l'API", async () => {
     const client = browser();
-    await client.signIn("demo");
+    await client.signIn("credentials", ALEX);
 
     const session = await client.session();
     const res = await call(me.GET, { token: session!.accessToken });
@@ -85,7 +86,7 @@ describe("NextAuth", () => {
   it("ré-émet le JWT de l'API quand il a expiré mais que la session glisse encore", async () => {
     freezeTime();
     const client = browser();
-    await client.signIn("demo");
+    await client.signIn("credentials", ALEX);
     const first = (await client.session())!.accessToken;
 
     // La session est prolongée à chaque lecture ; le JWT de l'API, lui, expire après 7 jours.

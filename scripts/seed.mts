@@ -1,5 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { parseArgs } from "node:util";
 import { db } from "../lib/db";
+import { hashPassword } from "../lib/server/password";
 import { purge } from "./purge";
 import { SCENARIO_PASSWORD, seedScenario, seedShop, SHOP_ITEMS } from "./scenario";
 import { createRng, fakeSeed, SEED_EMAIL_DOMAIN, SEED_PASSWORD } from "./seed-data";
@@ -9,6 +11,9 @@ import { createRng, fakeSeed, SEED_EMAIL_DOMAIN, SEED_PASSWORD } from "./seed-da
 // démo alex et ses amis), puis les comptes aléatoires (@seed.detox.local), leurs
 // posts, abonnements, likes et historiques de points. Les autres comptes ne sont
 // pas touchés.
+// Crée aussi les comptes « admin » et « user » (@detox.app) s'ils n'existent pas, sans
+// jamais modifier un compte existant. Mots de passe : SEED_ADMIN_PASSWORD et
+// SEED_USER_PASSWORD, sinon tirés au hasard et affichés une seule fois.
 
 const { values } = parseArgs({
   options: {
@@ -36,14 +41,35 @@ async function inChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>) 
   for (let i = 0; i < rows.length; i += CHUNK) await insert(rows.slice(i, i + CHUNK));
 }
 
+const ACCOUNTS = [
+  { username: "admin", email: "admin@detox.app", role: "admin", env: "SEED_ADMIN_PASSWORD" },
+  { username: "user", email: "user@detox.app", role: "user", env: "SEED_USER_PASSWORD" },
+] as const;
+
+async function seedAccounts() {
+  for (const { username, email, role, env } of ACCOUNTS) {
+    if (await db.user.findUnique({ where: { email } })) {
+      console.log(`Compte ${email} déjà présent, laissé tel quel.`);
+      continue;
+    }
+    const password = process.env[env] || randomBytes(9).toString("base64url");
+    await db.user.create({
+      data: { email, username, role, displayName: username, passwordHash: hashPassword(password), lastActiveAt: new Date() },
+    });
+    console.log(`Compte ${email} (${role}) créé. Mot de passe : ${process.env[env] ? `défini par ${env}` : password}.`);
+  }
+}
+
 try {
   await seedShop(db);
   console.log(`${SHOP_ITEMS.length} articles dans L'Épicerie.`);
 
   const scenario = await seedScenario(db);
   console.log(
-    `Maquette : ${scenario.users} comptes (dont alex@detox.test, compte démo) et ${scenario.posts} posts. Mot de passe : ${SCENARIO_PASSWORD}.`,
+    `Maquette : ${scenario.users} comptes (dont alex@detox.test) et ${scenario.posts} posts. Mot de passe : ${SCENARIO_PASSWORD}.`,
   );
+
+  await seedAccounts();
 
   const seedUsers = { email: { endsWith: `@${SEED_EMAIL_DOMAIN}` } };
   // Avec leurs posts, likes, abonnements… et ce qui dépend de ces posts.

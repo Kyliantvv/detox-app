@@ -119,7 +119,7 @@ export default function HomePage() {
           <div className="card flex flex-col items-center gap-3 p-6 text-center">
             <p className="font-display text-lg font-bold">Tu as tout vu.</p>
             <p className="text-sm text-muted">
-              Ton cercle est à jour. Le Flow, lui, ne s&apos;arrête jamais.
+              Ton cercle est à jour. Découvre la suite dans le Flow.
             </p>
             <button type="button" className="btn-lime" onClick={() => setTab("flow")}>
               Continuer sur le Flow

@@ -78,7 +78,7 @@ enum PointEventType {
   draw_payout
 }
 
-// order : fausse commande ; scratch / lootbox : crée un Draw.
+// order : commande ; scratch / lootbox : crée un Draw.
 enum ShopItemKind {
   order
   scratch
@@ -417,7 +417,7 @@ type OrderItem {
   price Int
 }
 
-// Fausse commande : rien n'est jamais livré.
+// Commande : adresse de livraison et numéro de suivi générés à l'achat.
 model Order {
   id             String      @id @default(auto()) @map("_id") @db.ObjectId
   userId         String      @db.ObjectId

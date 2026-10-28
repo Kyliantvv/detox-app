@@ -1,12 +1,12 @@
 # Détox
 
-Faux réseau social volontairement addictif. **Parodie, projet scolaire** : on gagne des points en scrollant et on les dépense dans une boutique fictive. Aucun vrai achat, aucun vrai paiement, aucune vraie livraison.
+Le réseau social qui récompense chaque geste. On gagne des points en scrollant, en partageant et en réagissant, puis on les dépense dans L'Épicerie et dans des compétences de Clairvoyance. Les achats se font uniquement en points Détox : aucun paiement en argent réel.
 
-Détox a la forme d'Instagram (fil, stories, reels, messages, recherche, profil), mais chaque geste rapporte des points, qu'on dépense dans une boutique d'objets addictifs et dans des compétences d'espionnage de ses amis. Le nom dit l'inverse du produit : c'est l'ironie.
+Détox réunit fil, stories, reels, messages, recherche et profil, et fait de chaque geste une récompense : des points à dépenser dans une boutique d'objets exclusifs et dans des compétences pour suivre l'activité de ses amis.
 
-- **Problème mis en scène** : les réseaux sociaux captent l'attention avec des récompenses aléatoires, des séries et du scroll infini. Détox pousse ces mécanismes à l'extrême pour les rendre visibles.
-- **Cible** : les étudiants et le jury du cours, pour la démo.
-- **Rendu** : jeudi 29 octobre 2026, groupe de 4.
+- **Proposition de valeur** : récompenses variables, séries de connexion, combos et scroll infini, pour que chaque session compte.
+- **Cible** : les étudiants et les jeunes actifs, très présents sur les réseaux sociaux.
+- **Bilan** : la page Bilan rend visible le temps passé et la Sérénité, pour garder la main sur son usage.
 
 ## Stack
 
@@ -14,7 +14,7 @@ Détox a la forme d'Instagram (fil, stories, reels, messages, recherche, profil)
 - **Médias** : UploadThing via `files-sdk` (route `/api/files`)
 - **Base** : MongoDB Atlas + Prisma 6 (`prisma/schema.prisma`, `lib/db/`) ; MongoDB en Docker pour le dev et les tests (`compose.yaml`)
 - **Sécurité** : scrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
-- **Qualité** : ESLint, Vitest + Supertest ; Swagger/OpenAPI prévu
+- **Qualité** : ESLint, Vitest + Supertest ; description OpenAPI sur `/api/openapi`, Swagger UI sur `/api/docs`
 - **Commits** : [Conventional Commits](https://www.conventionalcommits.org/fr/) (`feat:`, `fix:`, `test:`…), vérifiés par commitlint (hook `commit-msg` + CI)
 - **Lancement** : une seule app Next.js, voir ci-dessous
 
@@ -94,11 +94,11 @@ L'API tourne dans `app/api/**/route.ts`, au-dessus de MongoDB via Prisma (`lib/d
 
 **Authentification** : NextAuth v5 (`auth.ts`), provider Credentials branché sur la base, session JWT dans un cookie httpOnly chiffré. La session porte aussi le JWT de l'API (`accessToken`), que le front envoie en `Authorization: Bearer`. `proxy.ts` renvoie toute page vers `/connexion` sans session, et `/connexion` vers `/` avec une session. Les médias (`/api/media/:id`) exigent la session ou le Bearer.
 
-Variables (voir `.env.example`, à copier en `.env.local`) : `JWT_SECRET` et `AUTH_SECRET` (obligatoires en production), `AUTH_TRUST_HOST=true` hors Vercel. `MONGODB_URI` vise la base ; `pnpm db:seed` crée la boutique et les comptes de la maquette : `alex@detox.test` (démo), `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`.
+Variables (voir `.env.example`, à copier en `.env.local`) : `JWT_SECRET` et `AUTH_SECRET` (obligatoires en production), `AUTH_TRUST_HOST=true` hors Vercel. `MONGODB_URI` vise la base ; `pnpm db:seed` crée la boutique et les comptes de démonstration : `alex@detox.test`, `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`.
 
 | Domaine | Routes (toutes sous `/api`, Bearer requis sauf `health`, `auth/*`, `shop`) |
 |---|---|
-| Comptes | `POST auth/register`, `POST auth/login`, `POST auth/demo`, `GET/PATCH me` |
+| Comptes | `POST auth/register`, `POST auth/login`, `GET/PATCH me` |
 | Fil | `GET feed/circle`, `GET feed/flow?page=N`, `GET stories` |
 | Posts | `GET posts?author=&type=reel\|post&saved=1&explore=1`, `POST posts` (multipart `media` + `caption`), `GET media/:id`, `POST/DELETE posts/:id/likes`, `GET/POST posts/:id/comments`, `POST/DELETE posts/:id/saves` |
 | Comptes suivis | `GET users?q=`, `GET users/:username`, `GET/POST follows`, `DELETE follows/:targetId` |
@@ -135,7 +135,7 @@ Tout est calculé côté serveur : chaque gain ou débit écrit un `PointEvent` 
 | Bonus aléatoire | variable |
 | Combo (actions enchaînées) | multiplicateur |
 
-**L'Épicerie** : sachet de sucre (150), ticket à gratter (300), loot box (600), paquet de cigarettes (1000). Une commande crée une fausse livraison avec numéro de suivi inventé. Rien n'est livré.
+**L'Épicerie** : sachet de sucre (150), ticket à gratter (300), loot box (600), paquet de cigarettes (1000). Une commande génère une adresse de livraison et un numéro de suivi, consultables dans Mes commandes.
 
 **Clairvoyance** : 10 compétences pour espionner un ami (dernière connexion, solde, série, temps de scroll, derniers achats, visites de profil, plus gros gain, heures de pointe, cercle proche, dossier complet). Achat unique par cible, cible jamais notifiée, métadonnées seulement.
 
@@ -146,8 +146,8 @@ Tout est calculé côté serveur : chaque gain ou débit écrit un `PointEvent` 
 | 1. Comptes et sécurité | Auth, JWT, validation, erreurs normalisées, Swagger, tests d'auth |
 | 2. Contenu et fil | Posts (CRUD), uploads, Flow, Mon cercle, likes, commentaires, abonnements, Instants |
 | 3. Points et boutique | Points serveur, L'Épicerie, commandes, Clairvoyance, tirages |
-| 4. Messages, design, qualité | Messages, recherche, profil, intégration des maquettes, README, Docker, tests de bout en bout |
+| 4. Messages, design, qualité | Messages, recherche, profil, intégration du design, README, Docker, tests de bout en bout |
 
-## Avertissement
+## Mentions
 
-Projet scolaire parodique. Tout est fictif. Les marques réelles ne sont citées qu'en texte, sans logo.
+Les marques citées le sont en texte uniquement, sans logo.

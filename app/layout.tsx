@@ -23,7 +23,7 @@ const pressStart = Press_Start_2P({
 export const metadata: Metadata = {
   title: "Détox",
   description:
-    "Parodie de réseau social addictif. Projet scolaire : tout est fictif, rien n'est livré.",
+    "Détox, le réseau social qui récompense chaque geste : partage, découvre et gagne des points à dépenser dans L'Épicerie.",
 };
 
 export const viewport: Viewport = {

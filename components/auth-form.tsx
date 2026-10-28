@@ -74,16 +74,6 @@ export default function AuthForm({ mode }: { mode: Mode }) {
     }
   };
 
-  const enterDemo = async () => {
-    setPending(true);
-    const result = await signIn("demo", { redirect: false }).catch(() => null);
-    if (result && !result.error) enterApp();
-    else {
-      setFormError("Connexion au compte démo impossible.");
-      setPending(false);
-    }
-  };
-
   const labels: Record<Field, { label: string; type: string; autoComplete: string; hint?: string }> = {
     email: { label: "E-mail", type: "email", autoComplete: "email" },
     username: { label: "Nom d'utilisateur", type: "text", autoComplete: "username", hint: "ex. alex.detox" },
@@ -149,25 +139,17 @@ export default function AuthForm({ mode }: { mode: Mode }) {
         </button>
       </form>
 
-      <div className="flex items-center gap-3 text-xs text-muted">
-        <span className="h-px flex-1 bg-line" /> ou <span className="h-px flex-1 bg-line" />
-      </div>
-
-      <button type="button" className="btn-ghost" onClick={() => void enterDemo()} disabled={pending}>
-        Entrer avec le compte démo
-      </button>
-
       <p className="text-center text-sm text-muted">
         {mode === "inscription" ? (
           <>
-            Déjà accro ?{" "}
+            Déjà membre ?{" "}
             <Link href="/connexion" className="font-semibold text-lime">
               Me connecter
             </Link>
           </>
         ) : (
           <>
-            Pas encore accro ?{" "}
+            Pas encore de compte ?{" "}
             <Link href="/inscription" className="font-semibold text-lime">
               Créer un compte
             </Link>

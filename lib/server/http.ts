@@ -1,4 +1,5 @@
 // Réponses et erreurs normalisées de l'API (voir « Contrat d'API » dans le README).
+import { unstable_rethrow } from "next/navigation";
 import type { NextRequest } from "next/server";
 import { connectDb } from "../db/connect";
 import { toApiError } from "../db/errors";
@@ -40,6 +41,8 @@ export function route<Ctx>(handler: (request: NextRequest, ctx: Ctx) => Response
       if (process.env.MONGODB_URI) await connectDb();
       return await handler(request, ctx);
     } catch (error) {
+      // Les erreurs internes de Next (interruption du prérendu au build) doivent remonter telles quelles.
+      unstable_rethrow(error);
       if (error instanceof ApiError) return errorResponse(error.code, error.message);
       const dbError = toApiError(error);
       if (dbError) return json(dbError.body, dbError.status);

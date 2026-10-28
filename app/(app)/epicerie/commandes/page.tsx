@@ -15,7 +15,7 @@ export default function OrdersPage() {
       {orders.length === 0 ? (
         <div className="card flex flex-col items-center gap-3 p-6 text-center">
           <p className="font-semibold">Aucune commande pour l&apos;instant.</p>
-          <p className="text-sm text-muted">Ton premier sachet de sucre t&apos;attend. Enfin, il n&apos;arrivera pas.</p>
+          <p className="text-sm text-muted">Dépense tes points dans L&apos;Épicerie pour passer ta première commande.</p>
           <Link href="/epicerie" className="btn-sun">
             Voir les objets
           </Link>

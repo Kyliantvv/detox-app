@@ -100,7 +100,7 @@ describe("routes publiques", () => {
       id: "sucre",
       name: "Sachet de sucre",
       price: 150,
-      description: "Un petit shoot de glucose. Livré nulle part.",
+      description: "Un petit coup de sucre, livré à ta porte.",
       kind: "order",
     });
     expect(res.body.items.map((item: { id: string }) => item.id)).toEqual(["sucre", "ticket", "lootbox", "cigarettes"]);

@@ -8,7 +8,7 @@ export const GET = route(async (request) => {
   return json({ items: (await listOrders(user.id)).map(orderView) });
 });
 
-// Achat à L'Épicerie : débit et commande fictive, ticket ou loot box dans la même transaction.
+// Achat à L'Épicerie : débit et commande, ticket ou loot box dans la même transaction.
 export const POST = route(async (request) => {
   const user = await requireUser(request);
   const { itemId } = await readBody(request, { itemId: "string" });

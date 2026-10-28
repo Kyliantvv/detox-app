@@ -60,41 +60,41 @@ type ScenarioPost = {
 const CIRCLE_POSTS: ScenarioPost[] = [
   {
     key: "c1", author: "lina", location: "Quiberon", ago: 3 * MIN, art: "sunset", likes: 1248, tags: ["voyage"],
-    caption: "Jour 6 sans lâcher l'appli. Je me sens très détendue.",
-    comments: [{ author: "karim", text: "Pareil, j'ai oublié de dormir." }],
+    caption: "Jour 6 de vacances à Quiberon. Je me sens très détendue.",
+    comments: [{ author: "karim", text: "Magnifique, profite bien !" }],
   },
-  { key: "c2", author: "karim", location: "Lyon", ago: 22 * MIN, art: "moon", likes: 864, caption: "Méditation guidée par mes notifications." },
+  { key: "c2", author: "karim", location: "Lyon", ago: 22 * MIN, art: "moon", likes: 864, caption: "Méditation du matin au bord du Rhône." },
   {
     key: "c3", author: "ines", location: "Nantes", ago: HOUR, art: "waves", likes: 412, tags: ["voyage"],
-    caption: "Petite pause loin des écrans (photo prise depuis mon écran).",
+    caption: "Petite pause au bord de l'eau.",
     comments: [{ author: "lina", text: "Inspirant." }],
   },
-  { key: "c4", author: "noah", location: "Paris", ago: 3 * HOUR, art: "diamond", likes: 2031, caption: "J'ai gagné 300 pts en scrollant aux toilettes. Productif." },
+  { key: "c4", author: "noah", location: "Paris", ago: 3 * HOUR, art: "diamond", likes: 2031, caption: "J'ai gagné 300 pts en une soirée. Belle série !" },
 ];
 
 const REELS: ScenarioPost[] = [
-  { key: "r1", author: "karim", location: "Lyon", ago: 8 * MIN, art: "ring", likes: 5120, caption: "POV : tu fermes l'appli (non).", reel: true },
-  { key: "r2", author: "lina", location: "Quiberon", ago: HOUR, art: "sunset", likes: 9832, caption: "Coucher de soleil vu en 0,5 seconde.", reel: true },
-  { key: "r3", author: "ines", location: "Nantes", ago: 2 * HOUR, art: "dome", likes: 3307, caption: "Routine bien-être : 6 h d'écran.", reel: true },
-  { key: "r4", author: "noah", location: "Paris", ago: DAY, art: "triangle", likes: 12400, caption: "Tutoriel : scroller sans les mains.", reel: true },
+  { key: "r1", author: "karim", location: "Lyon", ago: 8 * MIN, art: "ring", likes: 5120, caption: "POV : ta première journée à la montagne.", reel: true },
+  { key: "r2", author: "lina", location: "Quiberon", ago: HOUR, art: "sunset", likes: 9832, caption: "Coucher de soleil sur la côte.", reel: true },
+  { key: "r3", author: "ines", location: "Nantes", ago: 2 * HOUR, art: "dome", likes: 3307, caption: "Ma routine bien-être du matin.", reel: true },
+  { key: "r4", author: "noah", location: "Paris", ago: DAY, art: "triangle", likes: 12400, caption: "Tutoriel : mon café maison en 3 minutes.", reel: true },
 ];
 
 const FLOW_ARTS: Art[] = ["triangle", "ring", "square", "dome", "dot", "pill", "sunset", "moon", "diamond", "waves"];
 const FLOW_CAPTIONS = [
-  "Encore un. Juste un.",
-  "Le scroll, c'est du cardio pour le pouce.",
-  "Je ne sais plus pourquoi j'ai ouvert l'appli.",
-  "Ma série tient bon. Moi moins.",
-  "Contenu recommandé pour toi, parce que tu es resté.",
-  "Il est 3 h du matin et tout va bien.",
-  "Une Bonne dose et j'arrête. Promis.",
+  "Un dimanche comme on les aime.",
+  "Sortie running de ce matin.",
+  "Petite découverte du jour.",
+  "Ma série tient bon, merci à vous !",
+  "Un coin tranquille pour travailler.",
+  "Lever de soleil sur la ville.",
+  "Une Bonne dose pour ce paysage ?",
 ];
 const FLOW_PLACES = ["Marseille", "Lille", "Bordeaux", "Rennes", "Toulouse", "Nice", "Brest"];
 const FLOW_AUTHORS = ["lina", "karim", "ines", "noah", "sam"] as const;
 const FLOW_TAGS = [["voyage"], [], ["chill"], ["voyage", "nature"], []];
 
 /** Posts du Flow : de quoi remplir plusieurs pages avant que le Flow ne reparte du début. */
-export const FLOW_POST_COUNT = 40;
+const FLOW_POST_COUNT = 40;
 
 const FLOW_POSTS: ScenarioPost[] = Array.from({ length: FLOW_POST_COUNT }, (_, n) => ({
   key: `f${n}`,
@@ -119,10 +119,10 @@ const INSTANTS: { author: keyof typeof USERS; art: Art; text: string; ago: numbe
 ];
 
 export const SHOP_ITEMS: { slug: string; name: string; description: string; icon: string; price: number; kind: ShopItemKind }[] = [
-  { slug: "sucre", name: "Sachet de sucre", description: "Un petit shoot de glucose. Livré nulle part.", icon: "sugar", price: 150, kind: "order" },
+  { slug: "sucre", name: "Sachet de sucre", description: "Un petit coup de sucre, livré à ta porte.", icon: "sugar", price: 150, kind: "order" },
   { slug: "ticket", name: "Ticket à gratter", description: "Gagne ou perds des points, au hasard.", icon: "ticket", price: 300, kind: "scratch" },
   { slug: "lootbox", name: "Loot box", description: "Un objet ou un bonus tiré au sort.", icon: "box", price: 600, kind: "lootbox" },
-  { slug: "cigarettes", name: "Paquet de cigarettes", description: "Fausse commande, fausse livraison, vraie ironie.", icon: "cigarette", price: 1000, kind: "order" },
+  { slug: "cigarettes", name: "Paquet de cigarettes", description: "Le grand classique, livré sous pli discret.", icon: "cigarette", price: 1000, kind: "order" },
 ];
 
 /** Crée ou met à jour les articles de L'Épicerie. */

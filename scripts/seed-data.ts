@@ -26,16 +26,16 @@ const LAST_NAMES = [
   "Morel", "Girard", "André", "Mercier", "Dupont", "Lambert", "Bonnet", "François", "Martinez", "Faure",
 ];
 const BIOS = [
-  "", "Je scrolle donc je suis.", "Accro au café et aux stories.", "Étudiant·e, fatigué·e.",
-  "Ici pour les points.", "Détox ? Demain.", "Photos de chats et de couchers de soleil.",
-  "Série en cours : ne pas casser.", "Je like tout, désolé·e.", "Lyon ↔ Paris",
+  "", "Curieux·se de tout.", "Fan de café et de stories.", "Étudiant·e.",
+  "Ici pour les points.", "Toujours partant·e.", "Photos de chats et de couchers de soleil.",
+  "Série en cours : ne pas casser.", "Je like tout, avec plaisir.", "Lyon ↔ Paris",
 ];
 const CAPTIONS = [
   "Encore un dimanche au soleil ☀️", "Vue imprenable ce matin", "Le meilleur brunch de la ville",
   "Petit tour en montagne", "Ça, c'est fait.", "Je ne m'en lasse pas", "Nouvelle coupe, qu'en dites-vous ?",
   "Throwback à cet été", "Séance de sport du jour 💪", "Coucher de soleil sans filtre",
   "Ma playlist du moment tourne en boucle", "Premier essai, soyez indulgents", "On refait le monde en terrasse",
-  "Week-end loin des écrans (ou presque)", "Quelqu'un reconnaît l'endroit ?", "",
+  "Week-end au calme", "Quelqu'un reconnaît l'endroit ?", "",
 ];
 const TAGS = ["voyage", "food", "sport", "mode", "nature", "art", "musique", "chill", "ville", "animaux"];
 const LOCATIONS = ["Paris", "Lyon", "Marseille", "Bordeaux", "Lille", "Nantes", "Toulouse", "Nice", "Annecy", "Biarritz"];
@@ -133,7 +133,7 @@ export function fakePosts(count: number, authorIds: string[], rng: Rng, now = ne
 }
 
 /** Chaque utilisateur suit entre 0 et 2 × `perUser` autres comptes. */
-export function fakeFollows(users: FakeUser[], perUser: number, rng: Rng, now = new Date()): Prisma.FollowCreateManyInput[] {
+function fakeFollows(users: FakeUser[], perUser: number, rng: Rng, now = new Date()): Prisma.FollowCreateManyInput[] {
   const byId = new Map(users.map((u) => [u.id, u]));
   const ids = [...byId.keys()];
   return users.flatMap((follower) =>
@@ -145,7 +145,7 @@ export function fakeFollows(users: FakeUser[], perUser: number, rng: Rng, now = 
 }
 
 /** Chaque post reçoit entre 0 et 2 × `perPost` likes, jamais de son auteur. */
-export function fakeLikes(posts: FakePost[], userIds: string[], perPost: number, rng: Rng, now = new Date()): WithId<Prisma.LikeCreateManyInput>[] {
+function fakeLikes(posts: FakePost[], userIds: string[], perPost: number, rng: Rng, now = new Date()): WithId<Prisma.LikeCreateManyInput>[] {
   return posts.flatMap((post) =>
     sample(userIds, rng.int(2 * perPost + 1), rng, post.authorId).map((userId) => {
       const createdAt = between(post.createdAt, now, rng);
@@ -154,7 +154,7 @@ export function fakeLikes(posts: FakePost[], userIds: string[], perPost: number,
   );
 }
 
-export const POINTS = { daily_login: 25, flow_page: 10, like: 2 } as const;
+const POINTS = { daily_login: 25, flow_page: 10, like: 2 } as const;
 const LABELS = { daily_login: "Connexion du jour", flow_page: "Page du Flow", like: "Bonne dose donnée" } as const;
 
 /**
@@ -162,7 +162,7 @@ const LABELS = { daily_login: "Connexion du jour", flow_page: "Page du Flow", li
  * connexion quotidienne un jour sur deux environ, 0 à 5 pages de Flow ces
  * jours-là, et une Bonne dose par like donné. Son solde en est la somme.
  */
-export function fakePointEvents(user: FakeUser, likesGiven: WithId<Prisma.LikeCreateManyInput>[], rng: Rng, now = new Date()) {
+function fakePointEvents(user: FakeUser, likesGiven: WithId<Prisma.LikeCreateManyInput>[], rng: Rng, now = new Date()) {
   const events: Prisma.PointEventCreateManyInput[] = [];
   const add = (type: keyof typeof POINTS, createdAt: Date, extra: { flowPage?: number; refId?: string } = {}) =>
     events.push({ userId: user.id, type, amount: POINTS[type], label: LABELS[type], day: parisDay(createdAt), createdAt, ...extra });

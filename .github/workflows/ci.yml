@@ -19,13 +19,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      # Pas de TEST_MONGODB_URI ici : seuls les tests unitaires tournent. Les tests de
-      # routes et de lib/db ont besoin de MongoDB, ils tournent dans le job db.
       - run: pnpm test
       - run: pnpm build
 
-  # Smoke test sur une vraie MongoDB (le replica set de compose.yaml) : schéma,
-  # index, seed lancé deux fois, puis toute la suite de tests sur une base *_test.
   db:
     runs-on: ubuntu-latest
     env:
@@ -39,9 +35,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: docker compose up -d --wait mongo
-      # prisma db push, puis les index hors schéma ; échoue s'il en manque un.
       - run: pnpm db:indexes
-      # La seconde passe doit remplacer les comptes de seed, pas les doubler.
       - name: pnpm db:seed (deux passes)
         run: |
           pnpm db:seed --users 20 --posts 50
@@ -64,7 +58,6 @@ jobs:
             if (!ok) quit(1);
           '
       - run: pnpm db:smoke
-      # Routes, couche serveur et lib/db sur une base dédiée, vidée et reseedée avant chaque test.
       - run: pnpm test
         env:
           TEST_MONGODB_URI: mongodb://localhost:27017/detox_test?directConnection=true

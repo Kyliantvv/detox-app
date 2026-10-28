@@ -2,7 +2,7 @@
 import { db, isDuplicateKey, type UserRow as User } from "../db";
 import { EMAIL, PASSWORD_MIN, USERNAME } from "../validation";
 import { signToken } from "./auth";
-import { DEFAULT_FOLLOWING, DEMO_EMAIL } from "./content";
+import { DEFAULT_FOLLOWING } from "./content";
 import { ApiError } from "./http";
 import { hashPassword, verifyPassword } from "./password";
 import { startSession, withPoints } from "./points";
@@ -54,12 +54,5 @@ export async function loginWithPassword(email: string, password: string) {
   if (!user || !verifyPassword(password, user.passwordHash)) {
     throw new ApiError("UNAUTHORIZED", "E-mail ou mot de passe incorrect.");
   }
-  return session(user, false);
-}
-
-// Bouton « Compte démo » : connexion sans mot de passe au compte de la maquette.
-export async function loginDemo() {
-  const user = await db.user.findUnique({ where: { email: DEMO_EMAIL } });
-  if (!user) throw new ApiError("NOT_FOUND", "Compte démo absent : lancer `pnpm db:seed`.");
   return session(user, false);
 }

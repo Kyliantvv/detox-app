@@ -1,4 +1,4 @@
-// Algorithme de recommandation du Flow et des Reels, volontairement « addictif » (c'est la parodie) :
+// Algorithme de recommandation du Flow et des Reels, conçu pour maximiser l'engagement :
 // il pousse ce que tu aimes déjà, ce qui est populaire, et une part de hasard pour la récompense variable.
 // Il ne se base que sur le comportement : Bonnes doses, enregistrements, commentaires, visites, abonnements.
 import { FLOW_PER_PAGE } from "../game";
@@ -7,7 +7,7 @@ import { visibleWhere } from "./posts";
 import { displayName } from "./views";
 
 // Poids de chaque action dans le profil de goûts : [affinité auteur, affinité visuel].
-export const WEIGHTS = {
+const WEIGHTS = {
   like: [3, 1],
   save: [4, 2],
   comment: [5, 1],
@@ -16,10 +16,10 @@ export const WEIGHTS = {
 } as const;
 
 // Posts examinés pour chaque page du Flow, et posts gardés (dont 1 surprise).
-export const FLOW_POOL = 20;
+const FLOW_POOL = 20;
 export { FLOW_PER_PAGE };
 // Amplitude du hasard ajouté à chaque score : la « récompense variable ».
-export const JITTER = 2;
+const JITTER = 2;
 // Interactions récentes prises en compte dans le profil de goûts, par type.
 const HISTORY = 500;
 

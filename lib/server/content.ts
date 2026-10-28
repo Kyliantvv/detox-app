@@ -6,19 +6,16 @@ import type { Skill, SkillId } from "../types";
 // Comptes suivis d'office à l'inscription, s'ils existent (comptes de la maquette, `pnpm db:seed`).
 export const DEFAULT_FOLLOWING = ["lina.m", "karim.zen", "ines.lofi", "noah.detox"];
 
-// E-mail du compte du bouton « Compte démo ».
-export const DEMO_EMAIL = "alex@detox.test";
-
 // Premiers messages des comptes `bot`, par pseudo : le fil est amorcé à la première lecture.
 export const STARTER_MESSAGES: Record<string, { from: "me" | "them"; text: string }[]> = {
   "karim.zen": [
     { from: "them", text: "T'as gratté ton ticket ?" },
-    { from: "me", text: "Deux +200 et un 0. Comme d'hab." },
+    { from: "me", text: "Deux +200 et un 0. Pas mal." },
     { from: "them", text: "T'as vu mon ticket ? +200 ×2 encore" },
   ],
   "lina.m": [
     { from: "me", text: "Tu viens ce soir ?" },
-    { from: "them", text: "Je fais une pause demain. Ou après-demain." },
+    { from: "them", text: "Je fais une pause demain." },
   ],
   "ines.lofi": [{ from: "them", text: "Tu m'as espionnée ??" }],
   "noah.detox": [{ from: "them", text: "Ma série : 9 jours. La tienne ?" }],
@@ -26,16 +23,16 @@ export const STARTER_MESSAGES: Record<string, { from: "me" | "them"; text: strin
 
 export const AUTO_REPLIES = [
   "Attends, je finis ma page de Flow.",
-  "Mdr. Je te réponds dans 3 scrolls.",
-  "J'ai plus de batterie mais je reste.",
+  "Je te réponds un peu plus tard.",
+  "Je suis en déplacement, je regarde ça ce soir.",
   "Tu as combien de points là ?",
-  "On se voit en vrai ? (non)",
+  "On se voit ce week-end ?",
 ];
 
 export const FAKE_ADDRESSES = [
-  "12 rue de l'Attention Captée, 75000 Nulle-Part",
-  "3 impasse du Scroll Infini, 69000 Ailleurs",
-  "8 allée de la Dopamine, 33000 Jamais",
+  "12 rue de la République, 75011 Paris",
+  "3 impasse des Lilas, 69003 Lyon",
+  "8 allée des Chartrons, 33000 Bordeaux",
 ];
 
 // Catalogue de la Clairvoyance : id du contrat d'API, compétence Prisma. Le prix vient de SKILLS (lib/db/skills.ts).

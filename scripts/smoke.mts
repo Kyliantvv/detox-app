@@ -21,7 +21,7 @@ try {
   check(SHOP_ITEMS.every((item) => slugs.includes(item.slug)), `boutique incomplète : ${slugs.join(", ") || "vide"}`);
 
   const demo = await db.user.findUnique({ where: { email: `alex@${SCENARIO_EMAIL_DOMAIN}` }, omit: { passwordHash: false } });
-  check(Boolean(demo && verifyPassword(SCENARIO_PASSWORD, demo.passwordHash)), "compte démo absent ou mot de passe différent");
+  check(Boolean(demo && verifyPassword(SCENARIO_PASSWORD, demo.passwordHash)), "compte alex de la maquette absent ou mot de passe différent");
 
   const counts = {
     scenarioUsers: await db.user.count({ where: { email: { endsWith: `@${SCENARIO_EMAIL_DOMAIN}` } } }),

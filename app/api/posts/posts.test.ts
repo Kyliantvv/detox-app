@@ -213,7 +213,7 @@ describe("/api/posts/[id]/comments", () => {
   it("liste les commentaires d'un post", async () => {
     const res = await call(comments.GET, { as: "alex", params: { id: POSTS.c1 } });
 
-    expect(res.body).toEqual({ items: [{ author: "karim.zen", text: "Pareil, j'ai oublié de dormir." }] });
+    expect(res.body).toEqual({ items: [{ author: "karim.zen", text: "Magnifique, profite bien !" }] });
   });
 
   it("ajoute un commentaire signé du compte connecté, compte-le et crédite une réaction", async () => {

@@ -10,16 +10,6 @@ export type ArtVariant =
   | "dot"
   | "waves";
 
-export type Friend = {
-  id: string;
-  username: string;
-  name: string;
-  status: string;
-  level: number;
-  hasInstant: boolean;
-  shielded?: boolean;
-};
-
 export type Post = {
   id: string;
   authorId: string;
@@ -72,7 +62,7 @@ export type Order = {
   at: number;
 };
 
-// Étape du faux suivi de colis : `at` à null pour la livraison, qui n'arrive jamais.
+// Étape du suivi de colis : `at` à null pour la livraison, sans date prévue.
 export type TrackingStep = { label: string; at: number | null; done: boolean };
 
 export type OrderDetail = Order & { steps: TrackingStep[] };

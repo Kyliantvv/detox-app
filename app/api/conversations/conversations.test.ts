@@ -60,7 +60,7 @@ describe("/api/conversations/[id]/messages", () => {
     expect(res.body.user).toMatchObject({ id: lina, username: "lina.m", followedByMe: true });
     expect(res.body.items.map(({ from, text }: { from: string; text: string }) => ({ from, text }))).toEqual([
       { from: "me", text: "Tu viens ce soir ?" },
-      { from: "them", text: "Je fais une pause demain. Ou après-demain." },
+      { from: "them", text: "Je fais une pause demain." },
     ]);
   });
 

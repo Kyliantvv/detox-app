@@ -28,7 +28,7 @@ export const authUser = (user: Pick<User, "id" | "email" | "username">) => ({
 export const author = (user: Profile): PostAuthor => ({ id: user.id, username: user.username, name: displayName(user) });
 
 // Statut affiché sous le pseudo : calculé depuis la dernière activité.
-export function statusOf(user: Pick<User, "shielded" | "lastActiveAt">, now = Date.now()) {
+function statusOf(user: Pick<User, "shielded" | "lastActiveAt">, now = Date.now()) {
   if (user.shielded) return "Bouclier actif";
   if (isOnline(user.lastActiveAt, now)) return "En ligne";
   if (!user.lastActiveAt) return "Hors ligne";
@@ -39,7 +39,7 @@ export function statusOf(user: Pick<User, "shielded" | "lastActiveAt">, now = Da
 export const followingIds = async (userId: string) =>
   (await db.follow.findMany({ where: { followerId: userId }, select: { followingId: true } })).map((f) => f.followingId);
 
-export const hasActiveStory = (authorId: string) =>
+const hasActiveStory = (authorId: string) =>
   db.story.count({ where: { authorId, expiresAt: { gt: new Date() } } }).then(Boolean);
 
 export async function publicUser(user: User, viewerId?: string): Promise<PublicUser> {

@@ -6,9 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Projet
 
-Détox : parodie de réseau social « addictif » (projet scolaire, tout est fictif). On gagne des points en scrollant et on les dépense dans une boutique et des compétences d'espionnage. Le texte de l'app, les commentaires et les messages d'erreur sont en **français** ; garder cette langue. Le vocabulaire métier (Flow, Instant, Bonne dose, Sérénité, L'Épicerie, Clairvoyance) est défini dans le README.
+Détox : réseau social à récompenses, présenté comme un vrai produit (le ton de l'interface est celui d'une entreprise qui vend son service, sans mention de projet scolaire ni de contenu fictif). On gagne des points en scrollant et on les dépense dans une boutique et des compétences d'espionnage. Le texte de l'app, les commentaires et les messages d'erreur sont en **français** ; garder cette langue. Le vocabulaire métier (Flow, Instant, Bonne dose, Sérénité, L'Épicerie, Clairvoyance) est défini dans le README.
 
 Tout tourne dans une seule app Next.js 16 (App Router, `cacheComponents: true`). Le contrat d'API du README (format d'erreur, `{"items":[...]}`, codes) est la référence.
+
+Textes visibles (interface, OpenAPI, README) : pas de mention « parodie », « fictif » ou « projet scolaire ». Les noms internes (`fakeAddress`, « maquette » pour le jeu de données de démo) restent tels quels.
 
 Les commits suivent Conventional Commits (`feat:`, `fix:`, `test:`…) : commitlint les vérifie dans le hook husky `commit-msg` et en CI. La CI lance `lint`, `typecheck`, `test` et `build`.
 
@@ -27,7 +29,7 @@ pnpm exec vitest run -t "Bonne dose"      # les tests dont le nom contient ce te
 # Base MongoDB (obligatoire pour lancer l'app)
 docker compose up -d --wait   # MongoDB 7 en replica set sur 27017
 pnpm db:indexes               # prisma db push + index que Prisma ne sait pas décrire
-pnpm db:seed                  # boutique, comptes de la maquette (@detox.test) et aléatoires (@seed.detox.local)
+pnpm db:seed                  # boutique, comptes de la maquette (@detox.test), aléatoires (@seed.detox.local), admin et user (@detox.app)
 pnpm db:smoke                 # vérifie en lecture seule que la base est prête
 pnpm db:ping                  # test de connexion + nombre de documents par collection
 pnpm exec prisma generate     # après un changement de prisma/schema.prisma, puis pnpm db:indexes
@@ -38,10 +40,10 @@ Node 22.9 ou plus (`--env-file-if-exists`). Variables : modèle dans `.env.examp
 
 - `JWT_SECRET`, `AUTH_SECRET` : obligatoires en production, valeurs de dev par défaut sinon.
 - `AUTH_TRUST_HOST=true` : sans lui, `next start` en local renvoie `UntrustedHost` sur toutes les routes NextAuth.
-- `MONGODB_URI` : la base de l'app et des scripts `db:*`. Avec podman, viser `127.0.0.1` plutôt que `localhost` (IPv6).
+- `MONGODB_URI` : la base de l'app et des scripts `db:*`. Base `dev` en développement, `prod` en production (le secret `MONGODB_URI_PROD` et la variable Vercel doivent viser `/prod`). Avec podman, viser `127.0.0.1` plutôt que `localhost` (IPv6).
 - `UPLOADTHING_TOKEN`, `FILES_API_SECRET` : `/api/files` uniquement. Le build passe sans elles.
 
-Comptes de la maquette, créés par `pnpm db:seed` : `alex@detox.test` (compte démo), `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`. Comptes aléatoires `@seed.detox.local` : mot de passe `detox1234`.
+Comptes de la maquette, créés par `pnpm db:seed` : `alex@detox.test`, `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`. Comptes aléatoires `@seed.detox.local` : mot de passe `detox1234`. `admin@detox.app` et `user@detox.app` (rôles `admin` et `user`) sont créés par le seed s'ils n'existent pas, jamais modifiés ensuite ; mots de passe : `SEED_ADMIN_PASSWORD` / `SEED_USER_PASSWORD`, sinon tirés au hasard et affichés une seule fois par le seed.
 
 ## Architecture
 
@@ -112,7 +114,7 @@ export const POST = route(async (request, ctx: RouteContext<"/api/x/[id]">) => {
 ### Authentification (deux couches)
 
 1. **NextAuth v5** (`auth.ts`, route `app/api/auth/[...nextauth]`) :
-   - providers `credentials` et `demo`, qui appellent `lib/server/accounts.ts` (fonctions aussi utilisées par `POST /api/auth/{login,register,demo}`) ; le compte démo est `alex@detox.test`, absent tant que `pnpm db:seed` n'a pas tourné ;
+   - provider `credentials`, qui appelle `lib/server/accounts.ts` (fonctions aussi utilisées par `POST /api/auth/{login,register}`);
    - session JWT dans un cookie httpOnly ;
    - la session expose `session.accessToken`, le JWT de l'API, ré-émis par le callback `jwt` s'il a expiré.
 2. **API** : HS256 maison dans `lib/server/auth.ts`. `requireUser` n'accepte **que** le Bearer, pas le cookie NextAuth. Seule exception : `/api/media/[id]` accepte aussi le cookie, parce qu'une balise `<img>` n'envoie pas de Bearer.

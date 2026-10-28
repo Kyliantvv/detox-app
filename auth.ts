@@ -2,7 +2,7 @@
 // La session porte aussi le JWT de l'API (accessToken), envoyé en Bearer par le front.
 import NextAuth, { CredentialsSignin, type User } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { loginDemo, loginWithPassword } from "@/lib/server/accounts";
+import { loginWithPassword } from "@/lib/server/accounts";
 import { findUser, signToken, verifyToken } from "@/lib/server/auth";
 import { ApiError } from "@/lib/server/http";
 
@@ -26,7 +26,7 @@ class InvalidLogin extends CredentialsSignin {
   code = "invalid_credentials";
 }
 
-function toUser(result: Awaited<ReturnType<typeof loginDemo>>): User {
+function toUser(result: Awaited<ReturnType<typeof loginWithPassword>>): User {
   return { ...result.user, accessToken: result.token };
 }
 
@@ -48,7 +48,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       },
     }),
-    Credentials({ id: "demo", name: "Compte démo", credentials: {}, authorize: async () => toUser(await loginDemo()) }),
   ],
   callbacks: {
     async jwt({ token, user }) {

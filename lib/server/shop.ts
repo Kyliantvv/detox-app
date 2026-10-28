@@ -91,8 +91,8 @@ export async function findOrder(userId: string, orderId: string) {
   return orderView(order);
 }
 
-// Faux suivi : les étapes se valident avec le temps écoulé depuis l'achat, sauf la livraison, jamais atteinte.
-export const TRACKING_STEPS = [
+// Suivi : les étapes se valident avec le temps écoulé depuis l'achat, sauf la livraison, qui n'a pas de date.
+const TRACKING_STEPS = [
   { label: "Commande validée", afterMs: 0 },
   { label: "Colis préparé", afterMs: 2 * 60_000 },
   { label: "Remis au transporteur", afterMs: 10 * 60_000 },

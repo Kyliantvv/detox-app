@@ -5,7 +5,6 @@ import { advanceTime, apiError, call, freezeTime } from "@/test/api";
 import { USERS, userRow } from "@/test/db";
 import * as follows from "../follows/route";
 import * as me from "../me/route";
-import * as demo from "./demo/route";
 import * as login from "./login/route";
 import * as register from "./register/route";
 
@@ -138,15 +137,5 @@ describe("POST /api/auth/register", () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual(apiError("INVALID_INPUT"));
     expect(await db.user.count()).toBe(before);
-  });
-});
-
-describe("POST /api/auth/demo", () => {
-  it("connecte le compte démo sans mot de passe", async () => {
-    const res = await call(demo.POST, { method: "POST" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.user).toEqual({ id: USERS.alex, email: "alex@detox.test", username: "alex.detox" });
-    expect((await call(me.GET, { token: res.body.token })).status).toBe(200);
   });
 });
