@@ -1,0 +1,124 @@
+import { describe, expect, it } from "vitest";
+import { registerAccount } from "@/lib/server/accounts";
+import { AUTO_REPLIES } from "@/lib/server/seed";
+import { MESSAGE_MAX } from "@/lib/validation";
+import { advanceTime, apiError, call, freezeTime } from "@/test/api";
+import * as thread from "./[id]/messages/route";
+import { GET } from "./route";
+
+type Item = { id: string; unread: boolean; preview: string };
+
+const list = async (as = "alex") => (await call(GET, { as })).body.items as Item[];
+const read = (id: string, as = "alex") => call(thread.GET, { as, params: { id } });
+const send = (id: string, text: unknown, as = "alex") => call(thread.POST, { as, params: { id }, body: { text } });
+
+describe("GET /api/conversations", () => {
+  it("amorce les fils des comptes seedés qui ont des messages de départ", async () => {
+    freezeTime();
+
+    const items = await list();
+
+    expect(items.map((item) => item.id).sort()).toEqual(["ines", "karim", "lina", "noah"]);
+    expect(items.find((item) => item.id === "karim")).toEqual({
+      id: "karim",
+      user: { id: "karim", username: "karim.zen", name: "Karim" },
+      preview: "T'as vu mon ticket ? +200 ×2 encore",
+      fromMe: false,
+      ago: "il y a 1 min",
+      at: Date.now() - 60_000,
+      unread: true,
+    });
+  });
+
+  it("marque un fil comme lu une fois ouvert", async () => {
+    await read("karim");
+
+    const items = await list();
+
+    expect(items.find((item) => item.id === "karim")?.unread).toBe(false);
+    expect(items.find((item) => item.id === "lina")?.unread).toBe(true);
+  });
+
+  it("remonte en tête le fil du dernier message", async () => {
+    freezeTime();
+    await list();
+
+    advanceTime(1000);
+    await send("noah", "Ma série : 0 jour.");
+
+    expect((await list())[0]).toMatchObject({ id: "noah", preview: "Ma série : 0 jour.", unread: false });
+  });
+});
+
+describe("/api/conversations/[id]/messages", () => {
+  it("renvoie le fil avec le profil de l'autre compte", async () => {
+    const res = await read("lina");
+
+    expect(res.status).toBe(200);
+    expect(res.body.user).toMatchObject({ id: "lina", username: "lina.m", followedByMe: true });
+    expect(res.body.items.map(({ from, text }: { from: string; text: string }) => ({ from, text }))).toEqual([
+      { from: "me", text: "Tu viens ce soir ?" },
+      { from: "them", text: "Je fais une pause demain. Ou après-demain." },
+    ]);
+  });
+
+  it("envoie un message et n'affiche la réponse automatique qu'après son délai", async () => {
+    freezeTime();
+
+    const res = await send("lina", "  On se voit ?  ");
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ message: { id: expect.any(String), from: "me", text: "On se voit ?", at: Date.now() } });
+    expect((await read("lina")).body.items.at(-1)).toMatchObject({ from: "me", text: "On se voit ?" });
+
+    advanceTime(1400);
+    const reply = (await read("lina")).body.items.at(-1);
+    expect(reply.from).toBe("them");
+    expect(AUTO_REPLIES).toContain(reply.text);
+  });
+
+  it("signale la réponse automatique comme non lue", async () => {
+    freezeTime();
+    await send("lina", "Coucou");
+    await read("lina");
+
+    advanceTime(1400);
+
+    expect((await list()).find((item) => item.id === "lina")?.unread).toBe(true);
+  });
+
+  it("ne fait pas répondre les vrais comptes, qui voient le message chez eux", async () => {
+    freezeTime();
+    const bob = registerAccount({ email: "bob@example.com", username: "bob", password: "secret1" }).user;
+
+    await send(bob.id, "Salut Bob");
+    advanceTime(60_000);
+
+    expect((await read(bob.id)).body.items).toHaveLength(1);
+    const fromAlex = (await list(bob.id)).find((item) => item.id === "alex");
+    expect(fromAlex).toMatchObject({ preview: "Salut Bob", unread: true });
+    expect((await read("alex", bob.id)).body.items).toEqual([expect.objectContaining({ from: "them", text: "Salut Bob" })]);
+  });
+
+  it.each([
+    ["vide", "   ", `Message : 1 à ${MESSAGE_MAX} caractères.`],
+    ["trop long", "x".repeat(MESSAGE_MAX + 1), `Message : 1 à ${MESSAGE_MAX} caractères.`],
+    ["qui n'est pas une chaîne", null, "Champ « text » : string attendu."],
+  ])("refuse un message %s", async (_, text, message) => {
+    const res = await send("lina", text);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(apiError("INVALID_INPUT", message));
+  });
+
+  it.each([
+    ["à soi-même", "alex", 404, apiError("NOT_FOUND", "Conversation introuvable.")],
+    ["à un compte inconnu", "fantome", 404, apiError("NOT_FOUND", "Conversation introuvable.")],
+    ["avec un id mal formé", "../lina", 400, apiError("INVALID_INPUT", "id mal formé.")],
+  ])("refuse d'écrire %s", async (_, id, status, error) => {
+    const res = await send(id, "Coucou");
+
+    expect(res.status).toBe(status);
+    expect(res.body).toEqual(error);
+  });
+});

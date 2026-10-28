@@ -85,7 +85,7 @@ export default function GroceryPage() {
               </div>
               <button
                 type="button"
-                onClick={() => buy(item.id)}
+                onClick={() => void buy(item.id)}
                 disabled={buying}
                 className={`btn shrink-0 px-3 text-[15px] ${affordable ? "bg-sun text-ink" : "border border-line bg-panel-2 text-muted"}`}
                 aria-label={`Acheter ${item.name} pour ${item.price} points`}

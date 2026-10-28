@@ -108,7 +108,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
         </p>
       </div>
 
-      <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+      <form onSubmit={(event) => void submit(event)} noValidate className="flex flex-col gap-4">
         {fields.map((field) => {
           const { label, type, autoComplete, hint } = labels[field];
           const error = errors[field];
@@ -153,7 +153,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
         <span className="h-px flex-1 bg-line" /> ou <span className="h-px flex-1 bg-line" />
       </div>
 
-      <button type="button" className="btn-ghost" onClick={enterDemo} disabled={pending}>
+      <button type="button" className="btn-ghost" onClick={() => void enterDemo()} disabled={pending}>
         Entrer avec le compte démo
       </button>
 

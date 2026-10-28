@@ -130,7 +130,7 @@ export default function Clairvoyance() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => buy(skill.id)}
+                    onClick={() => void buy(skill.id)}
                     className={`btn min-h-10 shrink-0 px-3 text-sm ${
                       skill.id === "dossier-complet" ? "bg-pink text-ink" : "bg-sun text-ink"
                     }`}

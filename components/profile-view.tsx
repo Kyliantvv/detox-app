@@ -82,9 +82,13 @@ function Profile({
 
   const saveBio = async (event: FormEvent) => {
     event.preventDefault();
-    await api.patch("/api/me", { bio: bio.trim() });
-    await mutate("/api/me");
-    setEditing(false);
+    try {
+      await api.patch("/api/me", { bio: bio.trim() });
+      await mutate("/api/me");
+      setEditing(false);
+    } catch {
+      // Le formulaire reste ouvert : on peut réessayer.
+    }
   };
 
   const toggleFollow = async () => {
@@ -125,7 +129,7 @@ function Profile({
                 </Link>
                 <button
                   type="button"
-                  onClick={() => signOut({ redirectTo: "/connexion" })}
+                  onClick={() => void signOut({ redirectTo: "/connexion" })}
                   className="rounded-lg px-3 py-2.5 text-left text-pink hover:bg-panel-2"
                 >
                   Se déconnecter
@@ -148,7 +152,7 @@ function Profile({
       <div>
         <p className="font-semibold">{profile.name}</p>
         {editing ? (
-          <form onSubmit={saveBio} className="mt-2 flex flex-col gap-2">
+          <form onSubmit={(event) => void saveBio(event)} className="mt-2 flex flex-col gap-2">
             <label htmlFor="bio" className="text-sm font-semibold text-muted">
               Bio
             </label>
@@ -189,7 +193,7 @@ function Profile({
               <button type="button" className="btn-ghost" onClick={() => setEditing(true)}>
                 Modifier le profil
               </button>
-              <button type="button" className="btn-ghost" onClick={share} aria-live="polite">
+              <button type="button" className="btn-ghost" onClick={() => void share()} aria-live="polite">
                 {copied ? "Lien copié" : "Partager"}
               </button>
             </div>
@@ -199,7 +203,7 @@ function Profile({
         <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
-            onClick={toggleFollow}
+            onClick={() => void toggleFollow()}
             className={following ? "btn-ghost" : "btn-sun"}
             aria-pressed={following}
           >

@@ -82,7 +82,7 @@ export default function Conversation({ userId }: { userId: string }) {
       <div ref={bottom} />
 
       <form
-        onSubmit={submit}
+        onSubmit={(event) => void submit(event)}
         className="fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 mx-auto flex max-w-[480px] gap-2 border-t border-line bg-ink px-4 py-3"
       >
         <label htmlFor="message" className="sr-only">
