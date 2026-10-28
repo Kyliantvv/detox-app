@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Détox : parodie de réseau social « addictif » (projet scolaire, tout est fictif). On gagne des points en scrollant et on les dépense dans une boutique et des compétences d'espionnage. Le texte de l'app, les commentaires et les messages d'erreur sont en **français** ; garder cette langue. Le vocabulaire métier (Flow, Instant, Bonne dose, Sérénité, L'Épicerie, Clairvoyance) est défini dans le README.
 
-Tout tourne dans une seule app Next.js 16 (App Router, `cacheComponents: true`). Le contrat d'API du README (format d'erreur, `{"items":[...]}`, codes) est la référence. Le README parle encore par endroits d'un « back Express » : il n'existe pas.
+Tout tourne dans une seule app Next.js 16 (App Router, `cacheComponents: true`). Le contrat d'API du README (format d'erreur, `{"items":[...]}`, codes) est la référence.
 
 Les commits suivent Conventional Commits (`feat:`, `fix:`, `test:`…) : commitlint les vérifie dans le hook husky `commit-msg` et en CI. La CI lance `lint`, `typecheck`, `test` et `build`.
 
@@ -24,46 +24,49 @@ pnpm test                     # Vitest, une passe (pnpm test:watch pour le mode 
 pnpm exec vitest run app/api/posts        # un dossier ou un fichier
 pnpm exec vitest run -t "Bonne dose"      # les tests dont le nom contient ce texte
 
-# Base MongoDB (couche Prisma, voir plus bas)
+# Base MongoDB (obligatoire pour lancer l'app)
 docker compose up -d --wait   # MongoDB 7 en replica set sur 27017
 pnpm db:indexes               # prisma db push + index que Prisma ne sait pas décrire
-pnpm db:seed                  # boutique + comptes @seed.detox.local (mot de passe detox1234)
-TEST_MONGODB_URI="mongodb://localhost:27017/detox_test?directConnection=true" pnpm test   # lance aussi lib/db/db.test.ts
+pnpm db:seed                  # boutique, comptes de la maquette (@detox.test) et aléatoires (@seed.detox.local)
+pnpm db:smoke                 # vérifie en lecture seule que la base est prête
+pnpm exec prisma generate     # après un changement de prisma/schema.prisma, puis pnpm db:indexes
+TEST_MONGODB_URI="mongodb://localhost:27017/detox_test?directConnection=true" pnpm test   # + tests de routes et lib/db
 ```
 
 Node 22.9 ou plus (`--env-file-if-exists`). Variables : modèle dans `.env.example`. `.env.local` l'emporte sur `.env`, pour Next, pour `prisma.config.ts` et pour les scripts `db:*`.
 
 - `JWT_SECRET`, `AUTH_SECRET` : obligatoires en production, valeurs de dev par défaut sinon.
 - `AUTH_TRUST_HOST=true` : sans lui, `next start` en local renvoie `UntrustedHost` sur toutes les routes NextAuth.
-- `MONGODB_URI` : couche Prisma uniquement.
+- `MONGODB_URI` : la base de l'app et des scripts `db:*`. Avec podman, viser `127.0.0.1` plutôt que `localhost` (IPv6).
 - `UPLOADTHING_TOKEN`, `FILES_API_SECRET` : `/api/files` uniquement. Le build passe sans elles.
 
-Comptes de l'API actuelle (base mockée) : `alex@detox.test` (compte démo), `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`.
+Comptes de la maquette, créés par `pnpm db:seed` : `alex@detox.test` (compte démo), `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`. Comptes aléatoires `@seed.detox.local` : mot de passe `detox1234`.
 
 ## Architecture
 
-### Deux couches de données qui coexistent
+### Données : Prisma + MongoDB
 
-1. **`lib/server/**` : base mockée en mémoire, celle qu'utilisent toutes les routes `app/api` aujourd'hui.** `db.ts` contient des `Map` sur `globalThis`, seedées depuis `seed.ts` au premier accès et **réinitialisées à chaque redémarrage**. Ces fichiers importent `server-only`.
-2. **`lib/db/**` : Prisma 6 + MongoDB, la cible.** Aucune route ni page ne l'importe encore. Seuls `scripts/seed.mts`, `scripts/indexes.mts` et `lib/db/db.test.ts` l'utilisent. Le schéma est dans `prisma/schema.prisma` ; le mode d'emploi et les règles sont dans `docs/db/README.md`, à lire avant de brancher une route dessus. L'essentiel :
-   - points via `creditPoints`/`spendPoints` uniquement ;
-   - un achat débite et crée son document dans la même `inTransaction` ;
-   - likes et commentaires via `likePost`/`addComment`… (document + compteur) ;
-   - `toApiError(err)` convertit les erreurs au format du contrat ;
-   - `toPublicUser`, `toSelfJSON` et `toDrawJSON` mettent en forme les réponses ;
-   - Prisma exige un replica set, même pour une simple écriture ;
-   - en prod, `connectDb()` refuse de démarrer s'il manque un index ;
-   - rester sur Prisma 6, la 7 ne gère pas MongoDB.
+- **`lib/db/**`** : Prisma 6 + MongoDB. Schéma dans `prisma/schema.prisma`, mode d'emploi et règles dans `docs/db/README.md`, à lire avant d'écrire une route. L'essentiel :
+  - points via `creditPoints`/`spendPoints` uniquement (ils renvoient le `PointEvent`, avec son `label`) ;
+  - un achat débite et crée son document dans la même `inTransaction` ;
+  - likes et commentaires via `likePost`/`addComment`… (document + compteur) ;
+  - `toApiError(err)` convertit les erreurs au format du contrat (`route()` le fait déjà) ;
+  - Prisma exige un replica set, même pour une simple écriture ;
+  - en prod, `connectDb()` (appelé par `route()`) refuse de démarrer s'il manque un index ;
+  - rester sur Prisma 6, la 7 ne gère pas MongoDB.
+- **`lib/server/**`** : logique métier au-dessus de `lib/db`, et mise au format du contrat d'API (`lib/types.ts`), qui ne suit pas le modèle Prisma (`name` vient de `displayName`, `status` est calculé depuis `lastActiveAt`, les ids de compétence du front sont traduits par `SKILL_CATALOG`…).
+- **`scripts/scenario.ts`** : comptes et contenus de la maquette (alex, ses amis `bot`, posts c1…c4, r1…r4, f0…f39, Instants, boutique), à ids fixes. Seedés par `pnpm db:seed` et avant chaque test de route.
+- Le barème (combo, coffre, Sérénité, niveau) est dans `lib/game.ts`, partagé avec le front ; `lib/db/activity.ts` le réexporte. Les prix des compétences sont dans `lib/db/skills.ts` (`SKILLS`).
+- Mots de passe : scrypt (`lib/server/password.ts`), y compris le hash figé des comptes aléatoires du seed.
+- Les scripts `tsx` (`scripts/*.mts`) ne peuvent pas importer un module qui importe `server-only` (`lib/server/content.ts`…) : le paquet n'est pas installé, seul Next le résout. Ils importent `lib/db` et `lib/server/password.ts` directement.
+- Nouveau modèle : un `@@unique` qui porte une règle métier va aussi dans `REQUIRED_INDEXES` (`lib/db/indexes.ts`). `resetDb()` des tests et `purge()` du seed parcourent tous les modèles via `Prisma.dmmf`, rien à ajouter.
 
-Les deux couches ne partagent pas leurs constantes et **ne concordent pas** :
+### Pièges Prisma sur MongoDB
 
-| Constante | `lib/game.ts` (mock) | `lib/db/activity.ts` (Prisma) |
-|---|---|---|
-| Coffre | toutes les 4 pages | tous les 50 posts |
-| Combo | fenêtre de 5 s | fenêtre de 10 s |
-| Sérénité | −3 par page | −5 par page |
-
-Les compétences de la Clairvoyance existent aussi deux fois : `lib/server/seed.ts` et `lib/db/skills.ts`. Côté hash de mot de passe, le mock utilise scrypt et le seed Prisma bcrypt. Une modification du barème est à reporter des deux côtés, ou à signaler.
+- `{ champ: null }` ne trouve pas un champ absent du document : filtrer avec `OR: [{ champ: null }, { champ: { isSet: false } }]` (voir `lib/server/conversations.ts`).
+- Les relations sont émulées : rien n'empêche d'écrire un id étranger qui n'existe pas, et un `include` d'une relation obligatoire vers un document absent fait échouer la requête.
+- `groupBy` avec `orderBy` sur `_count` n'est pas fiable : trier le résultat en JS.
+- Le type `User` de `@prisma/client` contient `passwordHash`, que le client omet : dans `lib/server`, utiliser `UserRow` (`lib/db`).
 
 ### Frontière serveur / client
 
@@ -77,27 +80,28 @@ Chaque handler suit le même schéma :
 
 ```ts
 export const POST = route(async (request, ctx: RouteContext<"/api/x/[id]">) => {
-  const user = requireUser(request);                // Bearer → DbUser, sinon ApiError UNAUTHORIZED
+  const user = await requireUser(request);          // Bearer → User (sans passwordHash), sinon ApiError UNAUTHORIZED
   const body = await readBody(request, { text: "string" }); // refuse les champs inconnus
   ...
-  return json({ ...withPoints(user.id, gains) });
+  return json({ ...(await withPoints(user.id, gains)) });
 });
 ```
 
 - `lib/server/http.ts` :
-  - `route()` convertit toute `ApiError` levée en `{"error":{"code","message"}}`, avec le statut tiré de la table `STATUS` ; un nouveau code d'erreur s'ajoute dans cette table.
-  - `assertId()` vérifie les ids des segments dynamiques (400 si mal formé).
+  - `route()` connecte la base, puis convertit toute `ApiError` levée en `{"error":{"code","message"}}`, avec le statut tiré de la table `STATUS` (un nouveau code s'y ajoute), et les erreurs de `lib/db` via `toApiError`.
+  - Les ids sont des ObjectId : `toId(id, "Post")` de `lib/db` (400 si mal formé). `assertId()` ne sert plus qu'aux pseudos.
 - `lib/server/points.ts` :
-  - `credit()` et `debit()` écrivent un `PointEvent` ;
-  - `debit()` lève `INSUFFICIENT_POINTS` ;
+  - `credit(userId, amount, type, label, { combo? })` et `debit()` passent par `creditPoints`/`spendPoints` ;
+  - `debit()` lève `INSUFFICIENT_POINTS` avec le montant manquant ;
   - les actions qui rapportent des points renvoient `withPoints()`, soit `{points, gains}`.
-- `lib/server/views.ts` met en forme les documents de la DB (`publicUser`, `postView`, `stats`) : ids publics seulement, jamais de hash.
-- Les posts du Flow (`f0`, `f1`…) ne sont pas stockés : `findPost()` les régénère de façon déterministe avec `flowPage()`.
-- Les réponses automatiques des comptes seedés (`bot: true`) sont stockées avec un `at` dans le futur et filtrées à la lecture. Il n'y a aucun timer serveur.
+- `lib/server/views.ts` met en forme les documents (`publicUser`, `postViews` en lot, `stats`) : ids publics seulement, jamais de hash.
+- `lib/server/posts.ts` : `visibleWhere(viewerId)` cache les posts `closeFriends` hors du cercle proche ; `userAndPost()` répond 404 pour un post invisible.
+- Le Flow tire chaque page d'une réserve de photos récentes (il repart du début quand il n'y en a plus) et la mémorise dans `FlowPage` pour la relire à l'identique.
+- Les réponses automatiques des comptes `bot` sont stockées avec un `createdAt` dans le futur et filtrées à la lecture. Il n'y a aucun timer serveur. Leurs premiers messages (`STARTER_MESSAGES`, `lib/server/content.ts`) amorcent le fil à la première lecture.
 
 ### Médias : deux circuits distincts
 
-- **`POST /api/posts`** (multipart `media` + `caption`) garde le fichier dans la base mockée. `GET /api/media/[id]` le sert.
+- **`POST /api/posts`** (multipart `media` + `caption`) garde le fichier dans la collection `media` (15 Mo max, limite d'un document Mongo). `GET /api/media/[id]` le sert.
 - **`/api/files`** passe par `files-sdk` vers UploadThing. Il n'est pas encore relié aux posts ni authentifié.
   - `lib/upload-router.ts` n'autorise que les opérations `upload` et `url`.
   - Il refuse une clé choisie par le client et n'accepte que des images, sans SVG : il vérifie le type déclaré et les premiers octets (`lib/image-signature.ts`).
@@ -107,7 +111,7 @@ export const POST = route(async (request, ctx: RouteContext<"/api/x/[id]">) => {
 ### Authentification (deux couches)
 
 1. **NextAuth v5** (`auth.ts`, route `app/api/auth/[...nextauth]`) :
-   - providers `credentials` et `demo`, qui appellent `lib/server/accounts.ts` (fonctions aussi utilisées par `POST /api/auth/{login,register,demo}`) ;
+   - providers `credentials` et `demo`, qui appellent `lib/server/accounts.ts` (fonctions aussi utilisées par `POST /api/auth/{login,register,demo}`) ; le compte démo est `alex@detox.test`, absent tant que `pnpm db:seed` n'a pas tourné ;
    - session JWT dans un cookie httpOnly ;
    - la session expose `session.accessToken`, le JWT de l'API, ré-émis par le callback `jwt` s'il a expiré.
 2. **API** : HS256 maison dans `lib/server/auth.ts`. `requireUser` n'accepte **que** le Bearer, pas le cookie NextAuth. Seule exception : `/api/media/[id]` accepte aussi le cookie, parce qu'une balise `<img>` n'envoie pas de Bearer.
@@ -129,12 +133,22 @@ Le type `JWT` de `@auth/core` n'est pas augmentable (pnpm ne hoiste pas ce paque
 
 ### Tests (Vitest)
 
-- Les tests de routes sont colocalisés (`app/api/<domaine>/<domaine>.test.ts`) et appellent directement les handlers exportés par `route.ts`, sans serveur, via `call()` de `test/api.ts` : `call(likes.POST, { as: "alex", params: { id: "c1" } })`. `as` signe un Bearer pour cet id, `token` envoie un Bearer brut, `body` est un objet JSON, une `FormData` ou une chaîne.
-- `test/setup.ts` remet la DB mockée à son état seedé avant chaque test. Pour préparer un cas particulier, on écrit directement dans `db()` ou `accountOf()`.
-- Aléatoire : `vi.spyOn(Math, "random")`, sachant que `uid()` en dépend aussi. Temps : `freezeTime()` et `advanceTime()` de `test/api.ts`, qui ne simulent que `Date`.
+Deux projets dans `vitest.config.mts` :
+
+- **`unit`** : tests sans base (`lib/game`, `lib/server/http`, `lib/server/auth`, `proxy.ts`, `/api/openapi`, `/api/files`, scripts). Toujours lancés.
+- **`db`** : routes (`app/api/**`), `lib/server/{points,recommend,require-user}.test.ts` et `lib/db/db.test.ts`. Lancés seulement si `TEST_MONGODB_URI` est défini (base dont le nom finit par `_test`). `test/db-global.ts` pousse le schéma et les index une fois ; `test/db-setup.ts` vide la base et la remplit avec la maquette avant **chaque** test ; un fichier à la fois.
+
+- Les tests de routes sont colocalisés (`app/api/<domaine>/<domaine>.test.ts`) et appellent directement les handlers exportés par `route.ts`, sans serveur, via `call()` de `test/api.ts` : `call(likes.POST, { as: "alex", params: { id: POSTS.c1 } })`. `as` accepte un prénom de la maquette ou un id brut et signe un Bearer, `token` envoie un Bearer brut, `body` est un objet JSON, une `FormData` ou une chaîne.
+- `test/db.ts` : `USERS` et `POSTS` (ids fixes de la maquette), `userRow("alex")` relit un compte, `postKeys(items)` redonne `c1`, `f7`… Pour préparer un cas particulier, écrire directement avec `db` (Prisma).
+- Aléatoire : `vi.spyOn(Math, "random")`. Temps : `freezeTime()` et `advanceTime()` de `test/api.ts`, qui ne simulent que `Date`. Les `@default(now())` de Prisma sont calculés par le moteur, pas par `Date` : passer `createdAt: new Date()` quand un test joue avec l'horloge.
 - Modules mockés : `@/auth` pour `/api/media` et `proxy.ts`, parce que `auth()` lit `next/headers` hors requête ; `@/lib/files` pour `/api/files`.
 - `next-auth` est inliné dans `vitest.config.mts` (il importe `next/server` sans extension) et `server-only` est remplacé par un module vide.
-- `lib/db/db.test.ts` (Prisma) n'est lancé que si `TEST_MONGODB_URI` est défini. Il vide la base, dont le nom doit finir par `_test`.
+
+### CI
+
+- `check` : lint, typecheck, tests unitaires, build.
+- `db` : MongoDB du `compose.yaml`, `db:indexes`, seed deux fois, `db:smoke`, puis toute la suite sur `detox_test`.
+- `prod` : après un push sur `main` seulement, `db:indexes`, `db:seed` et `db:smoke` sur la base du secret `MONGODB_URI_PROD` (environnement GitHub `production`). Jamais de tests sur cette base.
 
 ### Pièges Next 16 rencontrés
 

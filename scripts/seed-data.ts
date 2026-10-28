@@ -1,4 +1,4 @@
-import type { AvatarColor, PostType, Prisma, Visibility } from "@prisma/client";
+import type { Art, AvatarColor, PostType, Prisma, Visibility } from "@prisma/client";
 import { parisDay } from "../lib/db/time";
 
 // Fausses données pour `pnpm db:seed`. Pur et déterministe : une même graine
@@ -9,8 +9,9 @@ export const SEED_EMAIL_DOMAIN = "seed.detox.local";
 
 /** Mot de passe de tous les comptes de seed. */
 export const SEED_PASSWORD = "detox1234";
-// bcrypt (coût 10) de SEED_PASSWORD, calculé une fois : l'auth prévue utilise bcrypt.
-const SEED_PASSWORD_HASH = "$2b$10$zDgTsHS1wi0YmFSzx1wks.MVgzF/k.yj3NEycJ2wbao9DTgTQSUwm";
+// scrypt de SEED_PASSWORD, calculé une fois au format de lib/server/password.ts.
+const SEED_PASSWORD_HASH =
+  "aea951add24a16e2b17677d85139711a:6ad8d06611f6879dae0d8d1f8bbfa8fee0592a327c4f5897a34ae7d737b5f774";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -39,6 +40,7 @@ const CAPTIONS = [
 const TAGS = ["voyage", "food", "sport", "mode", "nature", "art", "musique", "chill", "ville", "animaux"];
 const LOCATIONS = ["Paris", "Lyon", "Marseille", "Bordeaux", "Lille", "Nantes", "Toulouse", "Nice", "Annecy", "Biarritz"];
 const AVATAR_COLORS: AvatarColor[] = ["pink", "yellow", "green", "purple", "grey"];
+const ARTS: Art[] = ["sunset", "moon", "triangle", "diamond", "pill", "ring", "square", "dome", "dot", "waves"];
 
 /** Générateur pseudo-aléatoire déterministe (mulberry32). */
 export function createRng(seed: number) {
@@ -124,6 +126,7 @@ export function fakePosts(count: number, authorIds: string[], rng: Rng, now = ne
       location: rng.chance(0.5) ? rng.pick(LOCATIONS) : undefined,
       tags,
       visibility,
+      art: rng.pick(ARTS),
       createdAt,
     };
   });
@@ -152,6 +155,7 @@ export function fakeLikes(posts: FakePost[], userIds: string[], perPost: number,
 }
 
 export const POINTS = { daily_login: 25, flow_page: 10, like: 2 } as const;
+const LABELS = { daily_login: "Connexion du jour", flow_page: "Page du Flow", like: "Bonne dose donnée" } as const;
 
 /**
  * Historique de points d'un utilisateur, de son inscription à `now` : une
@@ -161,7 +165,7 @@ export const POINTS = { daily_login: 25, flow_page: 10, like: 2 } as const;
 export function fakePointEvents(user: FakeUser, likesGiven: WithId<Prisma.LikeCreateManyInput>[], rng: Rng, now = new Date()) {
   const events: Prisma.PointEventCreateManyInput[] = [];
   const add = (type: keyof typeof POINTS, createdAt: Date, extra: { flowPage?: number; refId?: string } = {}) =>
-    events.push({ userId: user.id, type, amount: POINTS[type], day: parisDay(createdAt), createdAt, ...extra });
+    events.push({ userId: user.id, type, amount: POINTS[type], label: LABELS[type], day: parisDay(createdAt), createdAt, ...extra });
 
   const days = new Set<string>();
   let flowPage = 0;

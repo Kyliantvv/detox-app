@@ -13,7 +13,7 @@ Détox a la forme d'Instagram (fil, stories, reels, messages, recherche, profil)
 - **App** : Next.js 16 (App Router), React, TypeScript ; l'API vit dans `app/api/`
 - **Médias** : UploadThing via `files-sdk` (route `/api/files`)
 - **Base** : MongoDB Atlas + Prisma 6 (`prisma/schema.prisma`, `lib/db/`) ; MongoDB en Docker pour le dev et les tests (`compose.yaml`)
-- **Sécurité** (prévu) : bcrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
+- **Sécurité** : scrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
 - **Qualité** : ESLint, Vitest + Supertest ; Swagger/OpenAPI prévu
 - **Commits** : [Conventional Commits](https://www.conventionalcommits.org/fr/) (`feat:`, `fix:`, `test:`…), vérifiés par commitlint (hook `commit-msg` + CI)
 - **Lancement** : une seule app Next.js, voir ci-dessous
@@ -90,11 +90,11 @@ Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadT
 
 ### Implémentation actuelle (Route Handlers Next.js)
 
-En attendant le back Express, l'API tourne dans `app/api/**/route.ts` au-dessus d'une base mockée en mémoire (`lib/server/db.ts`, seedée depuis `lib/server/seed.ts`, remise à zéro à chaque redémarrage). Le front ne contient plus aucune donnée : tout passe par l'API (`lib/api-client.ts`, cache SWR).
+L'API tourne dans `app/api/**/route.ts`, au-dessus de MongoDB via Prisma (`lib/db`, voir [docs/db/README.md](docs/db/README.md)) ; `lib/server` porte la logique métier et met les documents au format du contrat. Le front ne contient aucune donnée : tout passe par l'API (`lib/api-client.ts`, cache SWR).
 
-**Authentification** : NextAuth v5 (`auth.ts`), provider Credentials branché sur la base mockée, session JWT dans un cookie httpOnly chiffré. La session porte aussi le JWT de l'API (`accessToken`), que le front envoie en `Authorization: Bearer`. `proxy.ts` renvoie toute page vers `/connexion` sans session, et `/connexion` vers `/` avec une session. Les médias (`/api/media/:id`) exigent la session ou le Bearer.
+**Authentification** : NextAuth v5 (`auth.ts`), provider Credentials branché sur la base, session JWT dans un cookie httpOnly chiffré. La session porte aussi le JWT de l'API (`accessToken`), que le front envoie en `Authorization: Bearer`. `proxy.ts` renvoie toute page vers `/connexion` sans session, et `/connexion` vers `/` avec une session. Les médias (`/api/media/:id`) exigent la session ou le Bearer.
 
-Variables (voir `.env.example`, à copier en `.env.local`) : `JWT_SECRET` et `AUTH_SECRET` (obligatoires en production), `AUTH_TRUST_HOST=true` hors Vercel. Comptes seedés : `alex@detox.test` (démo), `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`.
+Variables (voir `.env.example`, à copier en `.env.local`) : `JWT_SECRET` et `AUTH_SECRET` (obligatoires en production), `AUTH_TRUST_HOST=true` hors Vercel. `MONGODB_URI` vise la base ; `pnpm db:seed` crée la boutique et les comptes de la maquette : `alex@detox.test` (démo), `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`.
 
 | Domaine | Routes (toutes sous `/api`, Bearer requis sauf `health`, `auth/*`, `shop`) |
 |---|---|

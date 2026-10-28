@@ -49,7 +49,7 @@ describe("GET /api/orders/[id]", () => {
   });
 
   it("répond 404 pour une commande inconnue", async () => {
-    expect(await getOrder("inconnue")).toMatchObject({ status: 404, body: apiError("NOT_FOUND") });
+    expect(await getOrder("0".repeat(24))).toMatchObject({ status: 404, body: apiError("NOT_FOUND") });
   });
 
   it("répond 400 pour un id mal formé", async () => {

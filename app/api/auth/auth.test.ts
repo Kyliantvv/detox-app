@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { POINTS } from "@/lib/game";
-import { accountOf, db } from "@/lib/server/db";
+import { db } from "@/lib/db";
 import { advanceTime, apiError, call, freezeTime } from "@/test/api";
+import { USERS, userRow } from "@/test/db";
 import * as follows from "../follows/route";
 import * as me from "../me/route";
 import * as demo from "./demo/route";
@@ -17,7 +18,7 @@ describe("POST /api/auth/login", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
-      user: { id: "alex", email: "alex@detox.test", username: "alex.detox" },
+      user: { id: USERS.alex, email: "alex@detox.test", username: "alex.detox" },
       token: expect.stringMatching(/^[\w-]+\.[\w-]+\.[\w-]+$/),
     });
     const profile = await call(me.GET, { token: res.body.token });
@@ -34,7 +35,7 @@ describe("POST /api/auth/login", () => {
     expect(second.body.gains).toEqual([]);
     expect(second.body.points).toBe(first.body.points);
     // Le compte démo s'est connecté hier, 5e jour de série.
-    expect(accountOf("alex").streak).toBe(6);
+    expect((await userRow("alex")).streak).toMatchObject({ current: 6, best: 6 });
   });
 
   it("remet la série à 1 après un jour sans connexion", async () => {
@@ -45,7 +46,7 @@ describe("POST /api/auth/login", () => {
     const res = await call(login.POST, { body: ALEX });
 
     expect(res.body.gains).toHaveLength(1);
-    expect(accountOf("alex").streak).toBe(1);
+    expect((await userRow("alex")).streak?.current).toBe(1);
   });
 
   it("accepte l'e-mail sans tenir compte de la casse ni des espaces", async () => {
@@ -92,7 +93,8 @@ describe("POST /api/auth/register", () => {
     const res = await call(register.POST, { body: NEW_ACCOUNT });
 
     expect(JSON.stringify(res.body)).not.toMatch(/hash|secret1/i);
-    expect(db().users.get(res.body.user.id)?.passwordHash).not.toContain("secret1");
+    const { passwordHash } = await db.user.findUniqueOrThrow({ where: { id: res.body.user.id }, omit: { passwordHash: false } });
+    expect(passwordHash).not.toContain("secret1");
   });
 
   it("abonne le nouveau compte aux comptes par défaut", async () => {
@@ -100,7 +102,7 @@ describe("POST /api/auth/register", () => {
 
     const res = await call(follows.GET, { token: body.token });
 
-    expect(res.body.items).toEqual(["lina", "karim", "ines", "noah"]);
+    expect(res.body.items.sort()).toEqual([USERS.lina, USERS.karim, USERS.ines, USERS.noah].sort());
   });
 
   it("permet ensuite de se connecter avec le même mot de passe", async () => {
@@ -129,13 +131,13 @@ describe("POST /api/auth/register", () => {
     ["un nom avec des espaces", { username: "bob 42" }],
     ["un mot de passe trop court", { password: "12345" }],
   ])("répond 400 pour %s", async (_, override) => {
-    const before = db().users.size;
+    const before = await db.user.count();
 
     const res = await call(register.POST, { body: { ...NEW_ACCOUNT, ...override } });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual(apiError("INVALID_INPUT"));
-    expect(db().users.size).toBe(before);
+    expect(await db.user.count()).toBe(before);
   });
 });
 
@@ -144,7 +146,7 @@ describe("POST /api/auth/demo", () => {
     const res = await call(demo.POST, { method: "POST" });
 
     expect(res.status).toBe(200);
-    expect(res.body.user).toEqual({ id: "alex", email: "alex@detox.test", username: "alex.detox" });
+    expect(res.body.user).toEqual({ id: USERS.alex, email: "alex@detox.test", username: "alex.detox" });
     expect((await call(me.GET, { token: res.body.token })).status).toBe(200);
   });
 });

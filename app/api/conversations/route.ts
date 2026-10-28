@@ -1,40 +1,44 @@
+import { db } from "@/lib/db";
 import type { ConversationItem } from "@/lib/types";
 import { requireUser } from "@/lib/server/auth";
-import { conversation, conversationKey, db, formatAgo } from "@/lib/server/db";
+import { thread } from "@/lib/server/conversations";
+import { formatAgo } from "@/lib/server/format";
 import { json, route } from "@/lib/server/http";
 import { author } from "@/lib/server/views";
 
-// Conversations : fils existants plus ceux amorcés par les comptes seedés.
-export const GET = route((request) => {
-  const user = requireUser(request);
-  const store = db();
-  const now = Date.now();
-  const others = new Set<string>();
-  for (const key of store.messages.keys()) {
-    const [a, b] = key.split("__");
-    if (a === user.id) others.add(b);
-    else if (b === user.id) others.add(a);
-  }
-  for (const other of store.users.values()) if (other.bot && other.id !== user.id) others.add(other.id);
+// Conversations : fils existants plus ceux amorcés par les comptes `bot`.
+export const GET = route(async (request) => {
+  const user = await requireUser(request);
+  const bots = await db.user.findMany({ where: { bot: true, id: { not: user.id } } });
+  await Promise.all(bots.map((bot) => thread(user, bot)));
 
-  const items = [...others]
-    .map((otherId): ConversationItem | null => {
-      const other = store.users.get(otherId);
-      const visible = conversation(user.id, otherId).filter((message) => message.at <= now);
-      const last = visible.at(-1);
+  const now = new Date();
+  const conversations = await db.conversation.findMany({ where: { participantIds: { has: user.id } } });
+  const otherIds = conversations.map((conversation) => conversation.participantIds.find((id) => id !== user.id)!);
+  const others = new Map(
+    (await db.user.findMany({ where: { id: { in: otherIds } }, select: { id: true, username: true, displayName: true } })).map(
+      (other) => [other.id, other],
+    ),
+  );
+  const items = await Promise.all(
+    conversations.map(async (conversation, i): Promise<ConversationItem | null> => {
+      const other = others.get(otherIds[i]);
+      // Les réponses programmées des bots n'apparaissent qu'une fois leur heure passée.
+      const last = await db.message.findFirst({
+        where: { conversationId: conversation.id, createdAt: { lte: now } },
+        orderBy: { createdAt: "desc" },
+      });
       if (!other || !last) return null;
-      const readAt = store.reads.get(`${user.id}:${conversationKey(user.id, otherId)}`) ?? 0;
       return {
-        id: otherId,
+        id: other.id,
         user: author(other),
         preview: last.text,
         fromMe: last.senderId === user.id,
-        ago: formatAgo(last.at, now),
-        at: last.at,
-        unread: last.senderId !== user.id && last.at > readAt,
+        ago: formatAgo(last.createdAt, now.getTime()),
+        at: last.createdAt.getTime(),
+        unread: last.senderId !== user.id && !last.readAt,
       };
-    })
-    .filter((item) => item !== null)
-    .sort((a, b) => b.at - a.at);
-  return json({ items });
+    }),
+  );
+  return json({ items: items.filter((item) => item !== null).sort((a, b) => b.at - a.at) });
 });

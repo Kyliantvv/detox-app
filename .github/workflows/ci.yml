@@ -18,12 +18,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      # Pas de TEST_MONGODB_URI ici : lib/db/db.test.ts est sauté, il tourne dans le job db.
+      # Pas de TEST_MONGODB_URI ici : seuls les tests unitaires tournent. Les tests de
+      # routes et de lib/db ont besoin de MongoDB, ils tournent dans le job db.
       - run: pnpm test
       - run: pnpm build
 
   # Smoke test sur une vraie MongoDB (le replica set de compose.yaml) : schéma,
-  # index, seed lancé deux fois, puis les tests d'intégration de lib/db.
+  # index, seed lancé deux fois, puis toute la suite de tests sur une base *_test.
   db:
     runs-on: ubuntu-latest
     env:
@@ -46,8 +47,10 @@ jobs:
           pnpm db:seed --users 20 --posts 50
           docker compose exec -T mongo mongosh --quiet detox_smoke --eval '
             const count = (name, filter = {}) => db.getCollection(name).countDocuments(filter);
+            // 50 posts aléatoires et 48 de la maquette (comptes @detox.test).
             const got = {
               users: count("users", { email: /@seed\.detox\.local$/ }),
+              scenarioUsers: count("users", { email: /@detox\.test$/ }),
               posts: count("posts"),
               shopItems: count("shop_items"),
               follows: count("follows"),
@@ -55,12 +58,46 @@ jobs:
               pointEvents: count("point_events"),
             };
             printjson(got);
-            const ok = got.users === 20 && got.posts === 50 && got.shopItems === 4
+            const ok = got.users === 20 && got.scenarioUsers === 6 && got.posts === 98 && got.shopItems === 4
               && got.follows > 0 && got.likes > 0 && got.pointEvents > 0;
             if (!ok) quit(1);
           '
-      - run: pnpm exec vitest run lib/db
+      - run: pnpm db:smoke
+      # Routes, couche serveur et lib/db sur une base dédiée, vidée et reseedée avant chaque test.
+      - run: pnpm test
         env:
           TEST_MONGODB_URI: mongodb://localhost:27017/detox_test?directConnection=true
       - if: failure()
         run: docker compose logs mongo
+
+  # Base de production (MongoDB Atlas) : schéma et index, seed, puis smoke test en
+  # lecture seule. Uniquement après un push sur main, une fois les tests passés.
+  # L'URL vient du secret MONGODB_URI_PROD de l'environnement GitHub « production » ;
+  # les tests, eux, ne tournent jamais sur cette base.
+  prod:
+    needs: [check, db]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    # Deux pushes rapprochés sur main ne seedent pas la prod en même temps.
+    concurrency:
+      group: prod-db
+      cancel-in-progress: false
+    env:
+      MONGODB_URI: ${{ secrets.MONGODB_URI_PROD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Vérifie que le secret est défini
+        run: test -n "$MONGODB_URI" || { echo "Secret MONGODB_URI_PROD manquant (environnement production)"; exit 1; }
+      # prisma db push refuse un changement de schéma qui perdrait des données.
+      - run: pnpm db:indexes
+      # Remplace les comptes de la maquette (@detox.test) et de démo (@seed.detox.local) ;
+      # les comptes des vrais utilisateurs ne sont pas touchés.
+      - run: pnpm db:seed
+      - run: pnpm db:smoke

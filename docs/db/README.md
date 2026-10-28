@@ -32,9 +32,12 @@ Node 22.9 ou plus récent (`.nvmrc`) : les scripts utilisent `--env-file-if-exis
 | Script | Effet |
 |---|---|
 | `pnpm db:indexes` | `prisma db push` (collections et index du schéma), puis les index que Prisma ne sait pas décrire (uniques partiels, TTL, dans `lib/db/indexes.ts`). N'en supprime aucun. Code de sortie 1 si un index échoue ou manque. À relancer après chaque changement de schéma. |
-| `pnpm db:seed` | Crée ou met à jour les 4 articles de L'Épicerie, puis remplace les comptes de démo : 100 utilisateurs, 500 posts, leurs abonnements, likes et soldes par défaut. Relançable sans doublon. |
+| `pnpm db:seed` | Crée ou met à jour les 4 articles de L'Épicerie, remplace les comptes de la maquette (`scripts/scenario.ts`), puis les comptes de démo aléatoires : 100 utilisateurs, 500 posts, leurs abonnements, likes et soldes par défaut. Relançable sans doublon. |
+| `pnpm db:smoke` | Vérifie en lecture seule qu'une base est prête : index requis, boutique, compte démo, Instants en cours. Code de sortie 1 sinon. La CI le lance après le seed, sur la base de test et sur la prod. |
 
-**Données de démo.** `pnpm db:seed --users 20 --posts 50` en change le nombre ; `--follows 20` et `--likes 10` règlent le nombre moyen d'abonnements par utilisateur et de likes par post ; `--seed 7` change la graine, et une même graine redonne les mêmes données, à des dates comptées depuis le lancement. Les comptes de démo ont un e-mail en `@seed.detox.local` et le mot de passe `detox1234`. Chaque lancement les supprime avec tout ce qui en dépend (posts, likes, abonnements, et les likes ou commentaires d'autres comptes sur leurs posts), puis les recrée ; les autres comptes ne sont pas touchés. Les posts pointent vers des médias fictifs (`seed/photo-1.jpg`) : rien n'est envoyé sur UploadThing. Chaque compte a un journal de points (`point_events`) depuis son inscription : connexions quotidiennes (+25), pages de Flow (+10) et une Bonne dose (+2) par like donné. `points` et `totalEarned` en sont la somme, et `likesCount` compte les likes générés ; aucune dépense n'est générée. Le seed insère tout d'un bloc, sans passer par `creditPoints` ni `likePost`, mais en calcule le même résultat.
+**Maquette.** Le compte démo `alex@detox.test` et ses amis bots (`lina@detox.test`, `karim@detox.test`…, mot de passe `demo1234`), leurs posts (Mon cercle, Reels et 40 posts du Flow), Instants et abonnements. Ids fixes (`USERS`, `POSTS`) : les tests de routes repartent de cet état avant chaque test. Chaque lancement supprime les comptes `@detox.test` avec tout ce qui en dépend, puis les recrée.
+
+**Données de démo.** `pnpm db:seed --users 20 --posts 50` en change le nombre ; `--follows 20` et `--likes 10` règlent le nombre moyen d'abonnements par utilisateur et de likes par post ; `--seed 7` change la graine, et une même graine redonne les mêmes données, à des dates comptées depuis le lancement. Les comptes de démo ont un e-mail en `@seed.detox.local` et le mot de passe `detox1234`. Chaque lancement les supprime avec tout ce qui en dépend (posts, likes, abonnements, et les likes ou commentaires d'autres comptes sur leurs posts), puis les recrée ; les autres comptes ne sont pas touchés. Les posts pointent vers des médias fictifs (`seed/photo-1.jpg`) : rien n'est envoyé sur UploadThing. Chaque compte aléatoire a un journal de points (`point_events`) depuis son inscription : connexions quotidiennes (+25), pages de Flow (+10) et une Bonne dose (+2) par like donné. `points` et `totalEarned` en sont la somme, et `likesCount` compte les likes générés ; aucune dépense n'est générée. Le seed insère tout d'un bloc, sans passer par `creditPoints` ni `likePost`, mais en calcule le même résultat.
 
 Rien ne crée les index au démarrage, en dev non plus : lancer `pnpm db:indexes` sur une base neuve. En production (`NODE_ENV=production`), `connectDb()` refuse de se connecter s'il manque un index requis (`REQUIRED_INDEXES`) : lancer `pnpm db:indexes` avant de déployer. Les index uniques portent des règles métier (une page de Flow créditée une fois, un like par post, une conversation par paire), d'où ce blocage.
 
@@ -60,17 +63,19 @@ Rien ne crée les index au démarrage, en dev non plus : lancer `pnpm db:indexes
 | `Order` | orders | Fausse commande avec faux suivi |
 | `SkillPurchase` | skill_purchases | Compétence Clairvoyance achetée sur une cible |
 | `Draw` | draws | Ticket à gratter, loot box ou bonus (`DiceRoll` dans le dossier) ; `prizeItemId` pour l'objet d'une loot box |
+| `Media` | media | Média publié avec un post, servi par `/api/media/[id]` ; 15 Mo max (un document Mongo fait 16 Mo) |
+| `FlowPage` | flow_pages | Page du Flow telle que la recommandation l'a composée, pour la relire à l'identique |
 
 Le catalogue des 10 compétences n'est pas une collection : c'est la constante `SKILLS` dans `lib/db/skills.ts`.
 
 Valeurs calculées, pas stockées :
 
-- **Niveau** : `levelFor(totalEarned)`. **En ligne** : `isOnline(lastActiveAt)`, activité il y a moins de 2 min. Les deux sont dans le JSON public de `User` (`level`, `online`).
-- **Temps de scroll** (compétence 4) : `flowPagesToday(userId)`. **Sérénité** : `serenityFor(pages)`, 100 moins 5 par page lue dans la journée.
-- **Coffre** : `postsUntilChest(postsSeen)`, un coffre tous les `CHEST_EVERY` (50) posts.
+- **Niveau** : `levelFor(totalEarned)` (`lib/game.ts`, un niveau tous les 250 points). **En ligne** : `isOnline(lastActiveAt)`, activité il y a moins de 2 min. Les deux sont dans le JSON public de `User` (`level`, `online`).
+- **Temps de scroll** (compétence 4) : `flowPagesToday(userId)`. **Sérénité** : `serenityFor(pages, likes)`, 100 moins 3 par page lue et 1 par Bonne dose donnée dans la journée.
+- **Coffre** : `postsUntilChest(postsSeen)`, un coffre tous les `CHEST_EVERY` posts (4 pages de 5 posts).
 - **Derniers achats** (compétence 5) : les commandes sont dans `Order`, les tickets et loot box dans `Draw`. Lire les deux.
 
-Les seuils (`CHEST_EVERY`, `COMBO_GAP_MS`, `IDLE_GAP_MS`, `SERENITY_LOSS_PER_PAGE`) sont dans `lib/db/activity.ts`, à régler en test.
+Le barème (combo, coffre, Sérénité, niveau) vient de `lib/game.ts`, partagé avec le front : `lib/db/activity.ts` le réexporte (`CHEST_EVERY`, `COMBO_GAP_MS`, `SERENITY_LOSS_PER_PAGE`…). Seul `IDLE_GAP_MS` (temps passé) lui est propre.
 
 ## Utilisation
 
@@ -125,11 +130,13 @@ Si le document ne peut pas être créé (doublon, validation) ou si le solde ne 
 
 **Stories.** Créer avec `expiresAt: storyExpiry()` : Mongo la supprime 24 h après (index TTL).
 
-**Tests.** `lib/db/db.test.ts` tourne sur une vraie base, seulement si `TEST_MONGODB_URI` est défini (la CI le fait). La base est vidée : son nom doit finir par `_test`.
+**Tests.** Les tests de routes (`app/api`), de `lib/server` qui lisent la base et `lib/db/db.test.ts` forment le projet Vitest `db` : ils ne tournent que si `TEST_MONGODB_URI` est défini (le job `db` de la CI le fait). La base est vidée puis remplie avec la maquette avant chaque test : son nom doit finir par `_test`. Sans la variable, `pnpm test` ne lance que les tests unitaires.
 
 ```bash
 docker compose up -d --wait
 TEST_MONGODB_URI="mongodb://localhost:27017/detox_test?directConnection=true" pnpm test
 ```
+
+**Production.** Après un push sur `main`, le job `prod` de la CI lance `pnpm db:indexes`, `pnpm db:seed` puis `pnpm db:smoke` sur la base du secret `MONGODB_URI_PROD` (environnement GitHub `production`). Les tests ne touchent jamais cette base.
 
 **Jours.** `parisDay()` donne la date `AAAA-MM-JJ` à l'heure de Paris, pour la série de connexions et les gains du jour.

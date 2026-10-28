@@ -1,31 +1,27 @@
+import { db, likePost, unlikePost } from "@/lib/db";
 import { POINTS } from "@/lib/game";
-import { accountOf, db } from "@/lib/server/db";
 import { json, route } from "@/lib/server/http";
 import { credit, withPoints } from "@/lib/server/points";
-import { userAndPost } from "@/lib/server/post-route";
-import { postView } from "@/lib/server/views";
+import { userAndPost } from "@/lib/server/posts";
 
 type Ctx = RouteContext<"/api/posts/[id]/likes">;
+
+const doses = async (postId: string) => {
+  const post = await db.post.findUniqueOrThrow({ where: { id: postId }, select: { baseLikes: true, likesCount: true } });
+  return post.baseLikes + post.likesCount;
+};
 
 // Bonne dose : idempotente, les points ne sont crédités qu'à la première.
 export const POST = route(async (request, ctx: Ctx) => {
   const { user, post } = await userAndPost(request, ctx.params);
-  const key = `${user.id}:${post.id}`;
-  const likes = db().likes;
-  const gains = [];
-  if (!likes.has(key)) {
-    likes.add(key);
-    const account = accountOf(user.id);
-    account.serenity = Math.max(0, account.serenity - 1);
-    gains.push(credit(user.id, POINTS.dose, "Bonne dose donnée", { combo: true }));
-  }
-  const { doses, dosedByMe } = postView(post, user.id);
-  return json({ doses, dosedByMe, ...withPoints(user.id, gains) });
+  const gains = (await likePost(user.id, post.id))
+    ? await credit(user.id, POINTS.dose, "like", "Bonne dose donnée", { combo: true, refId: post.id })
+    : [];
+  return json({ doses: await doses(post.id), dosedByMe: true, ...(await withPoints(user.id, gains)) });
 });
 
 export const DELETE = route(async (request, ctx: Ctx) => {
   const { user, post } = await userAndPost(request, ctx.params);
-  db().likes.delete(`${user.id}:${post.id}`);
-  const { doses, dosedByMe } = postView(post, user.id);
-  return json({ doses, dosedByMe });
+  await unlikePost(user.id, post.id);
+  return json({ doses: await doses(post.id), dosedByMe: false });
 });

@@ -1,17 +1,22 @@
-import { db } from "@/lib/server/db";
+import { db, isDuplicateKey } from "@/lib/db";
 import { json, route } from "@/lib/server/http";
-import { userAndPost } from "@/lib/server/post-route";
+import { userAndPost } from "@/lib/server/posts";
 
 type Ctx = RouteContext<"/api/posts/[id]/saves">;
 
 export const POST = route(async (request, ctx: Ctx) => {
   const { user, post } = await userAndPost(request, ctx.params);
-  db().saves.add(`${user.id}:${post.id}`);
+  try {
+    await db.save.create({ data: { userId: user.id, postId: post.id, createdAt: new Date() } });
+  } catch (error) {
+    // Déjà enregistré : idempotent.
+    if (!isDuplicateKey(error)) throw error;
+  }
   return json({ savedByMe: true });
 });
 
 export const DELETE = route(async (request, ctx: Ctx) => {
   const { user, post } = await userAndPost(request, ctx.params);
-  db().saves.delete(`${user.id}:${post.id}`);
+  await db.save.deleteMany({ where: { userId: user.id, postId: post.id } });
   return json({ savedByMe: false });
 });

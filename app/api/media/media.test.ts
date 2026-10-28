@@ -1,6 +1,7 @@
 import type { Session } from "next-auth";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiError, call } from "@/test/api";
+import { USERS } from "@/test/db";
 import * as posts from "../posts/route";
 import { GET } from "./[id]/route";
 
@@ -36,7 +37,7 @@ describe("GET /api/media/[id]", () => {
 
   it("sert le média avec le seul cookie de session, comme une balise <img>", async () => {
     const id = await publish();
-    session.current = { user: { id: "lina", email: "lina@detox.test", username: "lina.m" }, accessToken: "", expires: "" };
+    session.current = { user: { id: USERS.lina, email: "lina@detox.test", username: "lina.m" }, accessToken: "", expires: "" };
 
     const res = await call(GET, { params: { id } });
 
@@ -53,7 +54,7 @@ describe("GET /api/media/[id]", () => {
   });
 
   it("répond 404 pour un média inconnu et 400 pour un id mal formé", async () => {
-    expect((await call(GET, { as: "alex", params: { id: "inconnu" } })).body).toEqual(
+    expect((await call(GET, { as: "alex", params: { id: "0".repeat(24) } })).body).toEqual(
       apiError("NOT_FOUND", "Média introuvable."),
     );
     expect((await call(GET, { as: "alex", params: { id: "a/b" } })).status).toBe(400);

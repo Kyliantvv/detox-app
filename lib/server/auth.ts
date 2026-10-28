@@ -1,6 +1,6 @@
 // JWT HS256 signés avec JWT_SECRET, sans dépendance externe.
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { db, touch, type DbUser } from "./db";
+import { db, recordActivity, type UserRow as User } from "../db";
 import { ApiError } from "./http";
 
 const TOKEN_TTL_S = 7 * 24 * 3600;
@@ -36,13 +36,22 @@ export function verifyToken(token: string): string | null {
   }
 }
 
+const OBJECT_ID = /^[0-9a-f]{24}$/i;
+
+// Le compte d'un token encore valide peut avoir été supprimé (seed relancé, par exemple).
+export async function findUser(userId: string): Promise<User | null> {
+  return OBJECT_ID.test(userId) ? db.user.findUnique({ where: { id: userId } }) : null;
+}
+
 // Middleware Bearer : renvoie l'utilisateur du token ou lève UNAUTHORIZED.
-export function requireUser(request: Request): DbUser {
+// Met à jour sa dernière activité et son temps passé.
+export async function requireUser(request: Request): Promise<User> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   const userId = token ? verifyToken(token) : null;
-  const user = userId ? db().users.get(userId) : undefined;
+  const user = userId ? await findUser(userId) : null;
   if (!user) throw new ApiError("UNAUTHORIZED", "Token manquant ou invalide.");
-  touch(user.id);
-  return user;
+  const now = new Date();
+  await recordActivity(user.id, now);
+  return { ...user, lastActiveAt: now };
 }

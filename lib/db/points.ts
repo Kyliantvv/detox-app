@@ -11,10 +11,12 @@ import { parisDay } from "./time";
 // mouvement à une autre écriture (achat, commande, tirage), passer le client
 // de sa propre transaction : tout est validé ou annulé ensemble (voir buySkill).
 
-type Opts = { refId?: Id; tx?: Tx };
+// `label` : texte du toast de gain et de l'historique du Bilan.
+type Opts = { refId?: Id; label?: string; tx?: Tx };
 
 /**
- * Crédite `amount` points (0 ne fait rien, pratique pour un tirage perdant).
+ * Crédite `amount` points (0 ne fait rien, pratique pour un tirage perdant)
+ * et renvoie le PointEvent créé (undefined pour 0).
  * Lève NotFoundError si l'utilisateur n'existe pas.
  * Pour une page de Flow, `flowPage` est obligatoire : un second crédit de la
  * même page lève une erreur de doublon (`isDuplicateKey`) et rien n'est
@@ -24,29 +26,31 @@ export async function creditPoints(userId: Id, amount: number, type: PointEventT
   assertInt(amount, 0);
   if (type === "flow_page" && !Number.isInteger(opts.flowPage)) throw new InvalidInputError("flowPage obligatoire pour flow_page");
   if (amount === 0) return;
-  const { tx, refId, flowPage } = opts;
+  const { tx, refId, flowPage, label } = opts;
   const id = toId(userId, "Utilisateur");
-  await inTransaction(tx, async (t) => {
+  return inTransaction(tx, async (t) => {
     const res = await t.user.updateMany({ where: { id }, data: { points: { increment: amount }, totalEarned: { increment: amount } } });
     if (res.count !== 1) throw new NotFoundError("Utilisateur");
-    await t.pointEvent.create({ data: { userId: id, amount, type, flowPage, refId, day: parisDay() } });
+    const now = new Date();
+    return t.pointEvent.create({ data: { userId: id, amount, type, label, flowPage, refId, day: parisDay(now), createdAt: now } });
   });
 }
 
 /**
- * Débite `amount` points et journalise la dépense (montant négatif).
+ * Débite `amount` points, journalise la dépense (montant négatif) et renvoie le PointEvent.
  * Le filtre `points >= amount` empêche le solde négatif et la double dépense.
  * Lève InsufficientPointsError si le solde ne suffit pas ; rien n'est écrit.
  * Une perte (ticket perdant) passe par ici, jamais par un crédit négatif.
  */
 export async function spendPoints(userId: Id, amount: number, type: PointEventType, opts: Opts = {}) {
   assertInt(amount, 1);
-  const { tx, refId } = opts;
+  const { tx, refId, label } = opts;
   const id = toId(userId, "Utilisateur");
-  await inTransaction(tx, async (t) => {
+  return inTransaction(tx, async (t) => {
     const res = await t.user.updateMany({ where: { id, points: { gte: amount } }, data: { points: { decrement: amount } } });
     if (res.count !== 1) throw new InsufficientPointsError();
-    await t.pointEvent.create({ data: { userId: id, amount: -amount, type, refId, day: parisDay() } });
+    const now = new Date();
+    return t.pointEvent.create({ data: { userId: id, amount: -amount, type, label, refId, day: parisDay(now), createdAt: now } });
   });
 }
 

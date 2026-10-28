@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { verifyToken } from "@/lib/server/auth";
 import { advanceTime, call, freezeTime } from "@/test/api";
+import { USERS } from "@/test/db";
 import * as me from "../../me/route";
 import { GET, POST } from "./route";
 
@@ -54,8 +55,8 @@ describe("NextAuth", () => {
     expect(response.status).toBe(302);
     expect(client.cookies.has("authjs.session-token")).toBe(true);
     const session = await client.session();
-    expect(session?.user).toMatchObject({ id: "lina", email: "lina@detox.test", username: "lina.m" });
-    expect(verifyToken(session!.accessToken)).toBe("lina");
+    expect(session?.user).toMatchObject({ id: USERS.lina, email: "lina@detox.test", username: "lina.m" });
+    expect(verifyToken(session!.accessToken)).toBe(USERS.lina);
   });
 
   it("fournit un accessToken accepté en Bearer par l'API", async () => {
@@ -66,7 +67,7 @@ describe("NextAuth", () => {
     const res = await call(me.GET, { token: session!.accessToken });
 
     expect(res.status).toBe(200);
-    expect(res.body.user.id).toBe("alex");
+    expect(res.body.user.id).toBe(USERS.alex);
   });
 
   it("refuse un mauvais mot de passe sans ouvrir de session", async () => {
@@ -95,6 +96,6 @@ describe("NextAuth", () => {
 
     expect(verifyToken(first)).toBeNull();
     expect(renewed).not.toBe(first);
-    expect(verifyToken(renewed)).toBe("alex");
+    expect(verifyToken(renewed)).toBe(USERS.alex);
   });
 });

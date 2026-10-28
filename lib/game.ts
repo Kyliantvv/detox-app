@@ -11,8 +11,12 @@ export const POINTS = {
 } as const;
 
 export const TICKET_PRICE = 300;
+export const FLOW_PER_PAGE = 5;
 export const CHEST_EVERY_PAGES = 4;
 export const COMBO_WINDOW_MS = 5000;
+// Sérénité (sur 100) perdue dans la journée par page de Flow lue et par Bonne dose donnée.
+export const SERENITY_LOSS_PER_PAGE = 3;
+export const SERENITY_LOSS_PER_LIKE = 1;
 
 export const levelFor = (totalEarned: number) => 1 + Math.floor(totalEarned / 250);
 

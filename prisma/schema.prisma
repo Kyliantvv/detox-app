@@ -28,6 +28,21 @@ enum Role {
   admin
 }
 
+// Visuel génératif d'un post ou d'un Instant (components/artwork.tsx), affiché
+// quand il n'y a pas de média.
+enum Art {
+  sunset
+  moon
+  triangle
+  diamond
+  pill
+  ring
+  square
+  dome
+  dot
+  waves
+}
+
 enum PostType {
   photo
   reel
@@ -60,6 +75,9 @@ enum PointEventType {
   comment
   repost
   daily_login
+  welcome
+  chest
+  post
   bonus
   combo
   shop_purchase
@@ -118,6 +136,10 @@ model User {
   avatarPath     String?
   avatarColor    AvatarColor @default(green)
   role           Role        @default(user)
+  // Bouclier : la Clairvoyance ne peut pas cibler ce compte.
+  shielded       Boolean     @default(false)
+  // Comptes de la maquette (seed) : ils répondent tout seuls aux messages.
+  bot            Boolean     @default(false)
   // Solde dépensable. Ne modifier que via lib/db/points.ts.
   points         Int         @default(0)
   // Cumul des gains, ne baisse jamais : sert au niveau.
@@ -151,6 +173,8 @@ model User {
   stories         Story[]
   messages        Message[]
   pointEvents     PointEvent[]
+  media           Media[]
+  flowPages       FlowPage[]
   orders          Order[]
   skillPurchases  SkillPurchase[] @relation("buyer")
   skillTargetedBy SkillPurchase[] @relation("target")
@@ -164,8 +188,11 @@ model Post {
   authorId      String     @db.ObjectId
   author        User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
   type          PostType
-  mediaPath     String // fichier dans uploads/
-  mediaMime     String
+  // `/api/media/<id>` pour un média publié ; chemin fictif pour le seed ; absent
+  // pour un post de la maquette, qui n'a que son visuel `art`.
+  mediaPath     String?
+  mediaMime     String?
+  art           Art        @default(dot)
   caption       String     @default("")
   location      String?
   tags          String[] // filtres de Recherche (voyage…)
@@ -174,6 +201,9 @@ model Post {
   likesCount    Int        @default(0)
   commentsCount Int        @default(0)
   repostsCount  Int        @default(0)
+  // Bonnes doses fictives des posts de la maquette, sans document Like :
+  // le compteur affiché est baseLikes + likesCount.
+  baseLikes     Int        @default(0)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -305,8 +335,10 @@ model Story {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   authorId  String   @db.ObjectId
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  mediaPath String
-  mediaMime String
+  mediaPath String?
+  mediaMime String?
+  art       Art      @default(dot)
+  text      String   @default("")
   viewerIds String[] @db.ObjectId
   expiresAt DateTime
   createdAt DateTime @default(now())
@@ -356,6 +388,8 @@ model PointEvent {
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Int // positif = gain, négatif = débit
   type      PointEventType
+  // Libellé affiché dans le toast de gain et l'historique du Bilan.
+  label     String         @default("")
   // Obligatoire pour flow_page (vérifié par creditPoints).
   flowPage  Int?
   refId     String?        @db.ObjectId // post, commande, compétence ou tirage concerné
@@ -453,4 +487,36 @@ model Draw {
 
   @@index([userId, status, createdAt(sort: Desc)])
   @@map("draws")
+}
+
+// Média publié avec un post (POST /api/posts), servi par GET /api/media/[id].
+// Un document MongoDB fait 16 Mo au plus : la route limite le fichier à 15 Mo.
+model Media {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId   String   @db.ObjectId
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  mime      String
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@map("media")
+}
+
+type FlowPick {
+  postId String @db.ObjectId
+  reason String
+}
+
+// Page du Flow telle que la recommandation l'a composée : relire une page
+// redonne les mêmes posts, avec les mêmes raisons.
+model FlowPage {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String     @db.ObjectId
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  page      Int
+  picks     FlowPick[]
+  createdAt DateTime   @default(now())
+
+  @@unique([userId, page])
+  @@map("flow_pages")
 }

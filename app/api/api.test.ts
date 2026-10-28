@@ -1,8 +1,8 @@
 // Contrat commun à toutes les routes : authentification Bearer et format des erreurs.
 import { describe, expect, it } from "vitest";
 import { signToken } from "@/lib/server/auth";
-import { SHOP_ITEMS } from "@/lib/server/seed";
 import { apiError, call, type CallOptions, type Handler } from "@/test/api";
+import { POSTS, USERS } from "@/test/db";
 import * as conversations from "./conversations/route";
 import * as messages from "./conversations/[id]/messages/route";
 import * as dice from "./dice/route";
@@ -27,7 +27,7 @@ import * as users from "./users/route";
 import * as user from "./users/[username]/route";
 
 
-const post = { id: "c1" };
+const post = { id: POSTS.c1 };
 // /api/media accepte aussi le cookie NextAuth : testée à part (app/api/media).
 const PROTECTED: [string, Handler<never>, CallOptions?][] = [
   ["GET /api/me", me.GET],
@@ -44,31 +44,31 @@ const PROTECTED: [string, Handler<never>, CallOptions?][] = [
   ["DELETE /api/posts/[id]/saves", saves.DELETE, { method: "DELETE", params: post }],
   ["GET /api/follows", follows.GET],
   ["POST /api/follows", follows.POST, { method: "POST" }],
-  ["DELETE /api/follows/[targetId]", unfollow.DELETE, { method: "DELETE", params: { targetId: "lina" } }],
+  ["DELETE /api/follows/[targetId]", unfollow.DELETE, { method: "DELETE", params: { targetId: USERS.lina } }],
   ["GET /api/users", users.GET],
   ["GET /api/users/[username]", user.GET, { params: { username: "lina.m" } }],
   ["GET /api/conversations", conversations.GET],
-  ["GET /api/conversations/[id]/messages", messages.GET, { params: { id: "lina" } }],
-  ["POST /api/conversations/[id]/messages", messages.POST, { method: "POST", params: { id: "lina" } }],
+  ["GET /api/conversations/[id]/messages", messages.GET, { params: { id: USERS.lina } }],
+  ["POST /api/conversations/[id]/messages", messages.POST, { method: "POST", params: { id: USERS.lina } }],
   ["GET /api/orders", orders.GET],
   ["POST /api/orders", orders.POST, { method: "POST" }],
   ["POST /api/dice", dice.POST, { method: "POST" }],
   ["GET /api/ticket", ticket.GET],
   ["POST /api/ticket/scratch", scratch.POST, { method: "POST" }],
-  ["GET /api/skills", skills.GET, { query: { targetId: "lina" } }],
+  ["GET /api/skills", skills.GET, { query: { targetId: USERS.lina } }],
   ["POST /api/skills/[skillId]", skill.POST, { method: "POST", params: { skillId: "solde" } }],
   ["GET /api/stories", stories.GET],
 ];
 
 describe("routes protégées", () => {
-  const [header, payload] = signToken("alex").split(".");
+  const [header, payload] = signToken(USERS.alex).split(".");
 
   it.each([
     ["sans en-tête Authorization", {}],
-    ["avec un autre schéma que Bearer", { headers: { authorization: `Basic ${signToken("alex")}` } }],
+    ["avec un autre schéma que Bearer", { headers: { authorization: `Basic ${signToken(USERS.alex)}` } }],
     ["avec un token mal formé", { token: "pas-un-jwt" }],
     ["avec une signature falsifiée", { token: `${header}.${payload}.signature` }],
-    ["pour un compte qui n'existe pas", { as: "fantome" }],
+    ["pour un compte qui n'existe pas", { as: "0".repeat(24) }],
   ] satisfies [string, CallOptions][])("refusent une requête %s", async (_, auth) => {
     const res = await call(me.GET, auth);
 
@@ -96,7 +96,13 @@ describe("routes publiques", () => {
     const res = await call(shop.GET);
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ items: SHOP_ITEMS });
+    expect(res.body.items[0]).toEqual({
+      id: "sucre",
+      name: "Sachet de sucre",
+      price: 150,
+      description: "Un petit shoot de glucose. Livré nulle part.",
+      kind: "order",
+    });
     expect(res.body.items.map((item: { id: string }) => item.id)).toEqual(["sucre", "ticket", "lootbox", "cigarettes"]);
   });
 });

@@ -1,5 +1,7 @@
 // Réponses et erreurs normalisées de l'API (voir « Contrat d'API » dans le README).
 import type { NextRequest } from "next/server";
+import { connectDb } from "../db/connect";
+import { toApiError } from "../db/errors";
 
 const STATUS = {
   INVALID_INPUT: 400,
@@ -8,6 +10,7 @@ const STATUS = {
   EMAIL_ALREADY_USED: 409,
   USERNAME_ALREADY_USED: 409,
   INSUFFICIENT_POINTS: 409,
+  CONFLICT: 409,
   TARGET_SHIELDED: 409,
 } as const;
 
@@ -27,13 +30,19 @@ export const json = (data: unknown, status = 200) => Response.json(data, { statu
 export const errorResponse = (code: ErrorCode, message: string) =>
   json({ error: { code, message } }, STATUS[code]);
 
-// Enveloppe un handler : toute ApiError levée devient une réponse d'erreur normalisée.
+// Enveloppe un handler : toute ApiError levée devient une réponse d'erreur normalisée,
+// comme les erreurs de lib/db (id mal formé, introuvable, doublon) via toApiError.
+// La première requête connecte la base : en production, connectDb() refuse de démarrer s'il manque un index.
 export function route<Ctx>(handler: (request: NextRequest, ctx: Ctx) => Response | Promise<Response>) {
   return async (request: NextRequest, ctx: Ctx) => {
     try {
+      // Sans MONGODB_URI (tests unitaires), seul un handler qui lit la base échoue.
+      if (process.env.MONGODB_URI) await connectDb();
       return await handler(request, ctx);
     } catch (error) {
       if (error instanceof ApiError) return errorResponse(error.code, error.message);
+      const dbError = toApiError(error);
+      if (dbError) return json(dbError.body, dbError.status);
       console.error(error);
       return json({ error: { code: "INTERNAL", message: "Erreur interne." } }, 500);
     }

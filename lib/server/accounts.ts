@@ -1,21 +1,22 @@
 // Création de compte et connexion, partagées par les routes /api/auth/* et NextAuth (auth.ts).
+import { db, isDuplicateKey, type UserRow as User } from "../db";
 import { EMAIL, PASSWORD_MIN, USERNAME } from "../validation";
 import { signToken } from "./auth";
-import { DEFAULT_FOLLOWING, DEMO_ID, db, followingOf, uid, userByEmail, userByUsername, type DbUser } from "./db";
+import { DEFAULT_FOLLOWING, DEMO_EMAIL } from "./content";
 import { ApiError } from "./http";
 import { hashPassword, verifyPassword } from "./password";
 import { startSession, withPoints } from "./points";
 import { authUser } from "./views";
 
 // Ce que reçoit le client après connexion : identité publique, JWT de l'API et gains de connexion.
-function session(user: DbUser, firstTime: boolean) {
-  const gains = startSession(user.id, firstTime);
-  return { user: authUser(user), token: signToken(user.id), ...withPoints(user.id, gains) };
+async function session(user: User, firstTime: boolean) {
+  const gains = await startSession(user.id, firstTime);
+  return { user: authUser(user), token: signToken(user.id), ...(await withPoints(user.id, gains)) };
 }
 
-export function registerAccount(input: { email: string; username: string; password: string }) {
+export async function registerAccount(input: { email: string; username: string; password: string }) {
   const email = input.email.trim().toLowerCase();
-  const username = input.username.trim();
+  const username = input.username.trim().toLowerCase();
   if (!EMAIL.test(email)) throw new ApiError("INVALID_INPUT", "Adresse e-mail invalide.");
   if (!USERNAME.test(username)) {
     throw new ApiError("INVALID_INPUT", "Nom d'utilisateur : 3 à 30 caractères, lettres, chiffres, points ou _.");
@@ -23,35 +24,42 @@ export function registerAccount(input: { email: string; username: string; passwo
   if (input.password.length < PASSWORD_MIN) {
     throw new ApiError("INVALID_INPUT", `Mot de passe : ${PASSWORD_MIN} caractères minimum.`);
   }
-  if (userByEmail(email)) throw new ApiError("EMAIL_ALREADY_USED", "Cet e-mail est déjà utilisé.");
-  if (userByUsername(username)) throw new ApiError("USERNAME_ALREADY_USED", "Ce nom d'utilisateur est déjà pris.");
-
-  const user: DbUser = {
-    id: uid(),
-    email,
-    username,
-    name: username,
-    bio: "",
-    passwordHash: hashPassword(input.password),
-    status: "En ligne",
-    shielded: false,
-    bot: false,
-    createdAt: Date.now(),
+  const taken = async () => {
+    if (await db.user.findUnique({ where: { email } })) {
+      throw new ApiError("EMAIL_ALREADY_USED", "Cet e-mail est déjà utilisé.");
+    }
+    if (await db.user.findUnique({ where: { username } })) {
+      throw new ApiError("USERNAME_ALREADY_USED", "Ce nom d'utilisateur est déjà pris.");
+    }
   };
-  db().users.set(user.id, user);
-  DEFAULT_FOLLOWING.forEach((id) => followingOf(user.id).add(id));
+  await taken();
+
+  let user: User;
+  try {
+    user = await db.user.create({ data: { email, username, passwordHash: hashPassword(input.password), lastActiveAt: new Date() } });
+  } catch (error) {
+    // Inscription simultanée avec le même e-mail ou pseudo : l'index unique tranche.
+    if (isDuplicateKey(error)) await taken();
+    throw error;
+  }
+  const defaults = await db.user.findMany({ where: { username: { in: DEFAULT_FOLLOWING } }, select: { id: true } });
+  if (defaults.length) {
+    await db.follow.createMany({ data: defaults.map(({ id }) => ({ followerId: user.id, followingId: id })) });
+  }
   return session(user, true);
 }
 
-export function loginWithPassword(email: string, password: string) {
-  const user = userByEmail(email.trim());
+export async function loginWithPassword(email: string, password: string) {
+  const user = await db.user.findUnique({ where: { email: email.trim().toLowerCase() }, omit: { passwordHash: false } });
   if (!user || !verifyPassword(password, user.passwordHash)) {
     throw new ApiError("UNAUTHORIZED", "E-mail ou mot de passe incorrect.");
   }
   return session(user, false);
 }
 
-// Bouton « Compte démo » : connexion sans mot de passe au compte seedé.
-export function loginDemo() {
-  return session(db().users.get(DEMO_ID)!, false);
+// Bouton « Compte démo » : connexion sans mot de passe au compte de la maquette.
+export async function loginDemo() {
+  const user = await db.user.findUnique({ where: { email: DEMO_EMAIL } });
+  if (!user) throw new ApiError("NOT_FOUND", "Compte démo absent : lancer `pnpm db:seed`.");
+  return session(user, false);
 }

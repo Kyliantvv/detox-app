@@ -1,3 +1,4 @@
+import { CHEST_EVERY_PAGES, COMBO_WINDOW_MS, FLOW_PER_PAGE, SERENITY_LOSS_PER_LIKE, SERENITY_LOSS_PER_PAGE } from "../game";
 import { db } from "./client";
 import { NotFoundError } from "./errors";
 import { type Id, toId } from "./ids";
@@ -7,16 +8,15 @@ import { parisDay } from "./time";
 // Chaque fonction fait une seule mise à jour atomique (pipeline), donc deux
 // requêtes simultanées ne perdent rien. Prisma n'a pas de mise à jour par
 // pipeline : on passe par une commande findAndModify brute (Extended JSON).
-// Les seuils restent à régler en test.
+// Le barème (combo, coffre, Sérénité) vient de lib/game.ts, partagé avec le front.
 
 /** Au-delà de cette pause, le temps n'est pas compté (app fermée, onglet oublié). */
 export const IDLE_GAP_MS = 2 * 60 * 1000;
 /** Au-delà de cette pause entre deux actions, le combo repart de 1. */
-export const COMBO_GAP_MS = 10 * 1000;
-/** Un coffre tous les N posts vus : « Encore N posts avant ton coffre ». */
-export const CHEST_EVERY = 50;
-/** Sérénité perdue par page de Flow lue dans la journée (sur 100). */
-export const SERENITY_LOSS_PER_PAGE = 5;
+export const COMBO_GAP_MS = COMBO_WINDOW_MS;
+/** Un coffre tous les N posts vus : CHEST_EVERY_PAGES pages de Flow. */
+export const CHEST_EVERY = CHEST_EVERY_PAGES * FLOW_PER_PAGE;
+export { SERENITY_LOSS_PER_LIKE, SERENITY_LOSS_PER_PAGE };
 
 type UserCounters = { combo?: { count: number }; postsSeen?: number; postsSeenToday?: { count: number } };
 
@@ -49,7 +49,7 @@ export async function recordActivity(userId: Id, now = new Date()) {
 
 /** Enregistre une action qui rapporte des points et renvoie la longueur du combo en cours. */
 export async function bumpCombo(userId: Id, now = new Date()) {
-  const chained = { $lte: [{ $subtract: [date(now), { $ifNull: ["$combo.lastActionAt", date(new Date(0))] }] }, COMBO_GAP_MS] };
+  const chained = { $lt: [{ $subtract: [date(now), { $ifNull: ["$combo.lastActionAt", date(new Date(0))] }] }, COMBO_GAP_MS] };
   const user = await updateUser(userId, [
     { $set: { combo: { count: { $cond: [chained, { $add: [{ $ifNull: ["$combo.count", 0] }, 1] }, 1] }, lastActionAt: date(now) } } },
   ]);
@@ -81,7 +81,12 @@ export function flowPagesToday(userId: Id, now = new Date()) {
   return db.pointEvent.count({ where: { userId: toId(userId, "Utilisateur"), type: "flow_page", day: parisDay(now) } });
 }
 
-/** Jauge de calme sur 100, qui baisse à chaque page de Flow lue dans la journée. */
-export function serenityFor(flowPages: number) {
-  return Math.max(0, 100 - flowPages * SERENITY_LOSS_PER_PAGE);
+/** Bonnes doses données aujourd'hui : elles entament aussi la Sérénité. */
+export function likesToday(userId: Id, now = new Date()) {
+  return db.pointEvent.count({ where: { userId: toId(userId, "Utilisateur"), type: "like", day: parisDay(now) } });
+}
+
+/** Jauge de calme sur 100, qui baisse à chaque page de Flow et Bonne dose de la journée. */
+export function serenityFor(flowPages: number, likes = 0) {
+  return Math.max(0, 100 - flowPages * SERENITY_LOSS_PER_PAGE - likes * SERENITY_LOSS_PER_LIKE);
 }

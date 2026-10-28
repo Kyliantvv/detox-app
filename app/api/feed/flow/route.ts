@@ -1,31 +1,46 @@
-import { CHEST_EVERY_PAGES, POINTS } from "@/lib/game";
+import { CHEST_EVERY, likesToday, flowPagesToday, isDuplicateKey, recordPostsSeen, serenityFor } from "@/lib/db";
+import { FLOW_PER_PAGE, POINTS } from "@/lib/game";
 import type { PointEvent } from "@/lib/types";
 import { requireUser } from "@/lib/server/auth";
-import { accountOf } from "@/lib/server/db";
 import { ApiError, json, route } from "@/lib/server/http";
 import { credit, withPoints } from "@/lib/server/points";
 import { flowRecommendations } from "@/lib/server/recommend";
-import { postView } from "@/lib/server/views";
+import { postViews } from "@/lib/server/views";
 
 const MAX_PAGE = 10_000;
 
-// Flow infini : chaque page est créditée une seule fois, avec coffre et bonus aléatoire.
-export const GET = route((request) => {
-  const user = requireUser(request);
+// Flow infini : chaque page est créditée une seule fois (index unique), avec coffre et bonus aléatoire.
+export const GET = route(async (request) => {
+  const user = await requireUser(request);
   const raw = request.nextUrl.searchParams.get("page") ?? "0";
   const page = Number(raw);
   if (!/^\d+$/.test(raw) || page > MAX_PAGE) throw new ApiError("INVALID_INPUT", "page doit être un entier positif.");
 
-  const account = accountOf(user.id);
   const gains: PointEvent[] = [];
-  if (!account.flowPagesRead.includes(page)) {
-    account.flowPagesRead.push(page);
-    account.serenity = Math.max(0, account.serenity - 3);
-    gains.push(credit(user.id, POINTS.flowPage, `Page ${page + 1} du Flow`, { combo: true }));
-    if (account.flowPagesRead.length % CHEST_EVERY_PAGES === 0) gains.push(credit(user.id, POINTS.chest, "Coffre ouvert"));
-    if (Math.random() < 0.15) gains.push(credit(user.id, 10 + Math.floor(Math.random() * 15) * 10, "Bonus aléatoire"));
+  let firstRead = true;
+  try {
+    gains.push(...(await credit(user.id, POINTS.flowPage, "flow_page", `Page ${page + 1} du Flow`, { combo: true, flowPage: page })));
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+    firstRead = false;
+  }
+  if (firstRead) {
+    const seen = await recordPostsSeen(user.id, FLOW_PER_PAGE);
+    if (seen.total % CHEST_EVERY === 0) gains.push(...(await credit(user.id, POINTS.chest, "chest", "Coffre ouvert")));
+    if (Math.random() < 0.15) {
+      gains.push(...(await credit(user.id, 10 + Math.floor(Math.random() * 15) * 10, "bonus", "Bonus aléatoire")));
+    }
   }
   // Posts choisis par l'algorithme de recommandation (lib/server/recommend.ts), avec leur raison.
-  const items = flowRecommendations(user.id, page).map(({ post, reason }) => ({ ...postView(post, user.id), reason }));
-  return json({ items, page, nextPage: page < MAX_PAGE ? page + 1 : null, serenity: account.serenity, ...withPoints(user.id, gains) });
+  const picks = await flowRecommendations(user.id, page);
+  const views = await postViews(picks.map((pick) => pick.post), user.id);
+  const items = views.map((view, i) => ({ ...view, reason: picks[i].reason }));
+  const serenity = serenityFor(await flowPagesToday(user.id), await likesToday(user.id));
+  return json({
+    items,
+    page,
+    nextPage: page < MAX_PAGE ? page + 1 : null,
+    serenity,
+    ...(await withPoints(user.id, gains)),
+  });
 });

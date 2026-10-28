@@ -4,8 +4,8 @@ import { withPoints } from "@/lib/server/points";
 import { scratch } from "@/lib/server/shop";
 
 export const POST = route(async (request) => {
-  const user = requireUser(request);
+  const user = await requireUser(request);
   const { index } = await readBody(request, { index: "number" });
-  const { ticket, gains } = scratch(user.id, index);
-  return json({ ticket, ...withPoints(user.id, gains) });
+  const { ticket, gains } = await scratch(user.id, index);
+  return json({ ticket, ...(await withPoints(user.id, gains)) });
 });

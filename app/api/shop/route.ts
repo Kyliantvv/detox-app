@@ -1,5 +1,4 @@
-import { SHOP_ITEMS } from "@/lib/server/seed";
+import { route, json } from "@/lib/server/http";
+import { listShopItems, shopItemView } from "@/lib/server/shop";
 
-export function GET() {
-  return Response.json({ items: SHOP_ITEMS });
-}
+export const GET = route(async () => json({ items: (await listShopItems()).map(shopItemView) }));
