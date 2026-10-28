@@ -6,42 +6,57 @@ import Instants from "@/components/instants";
 import PostCard from "@/components/post-card";
 import { Brand } from "@/components/top-bar";
 import { BoltIcon, HeartIcon } from "@/components/icons";
-import { CIRCLE_POSTS, flowPage } from "@/lib/mock-data";
-import { readFlowPage, useDetox } from "@/lib/store";
+import { useApi, useApiData, useMe } from "@/lib/api-client";
+import { CHEST_EVERY_PAGES } from "@/lib/game";
+import { useApplyGains } from "@/lib/gains";
+import type { PointsResponse, PostView } from "@/lib/types";
 
-const CHEST_EVERY_PAGES = 4;
+type FlowPage = PointsResponse & { items: PostView[]; page: number; nextPage: number | null };
 
 export default function HomePage() {
-  const state = useDetox();
+  const api = useApi();
+  const applyGains = useApplyGains();
+  const { data: me } = useMe();
+  const { data: circle } = useApiData<{ items: PostView[] }>("/api/feed/circle");
   const [tab, setTab] = useState<"cercle" | "flow">("cercle");
-  const [flowPages, setFlowPages] = useState(1);
+  const [flowPosts, setFlowPosts] = useState<PostView[]>([]);
+  const [flowError, setFlowError] = useState("");
   const sentinel = useRef<HTMLDivElement>(null);
-  const loadedPages = useRef(1);
+  const nextPage = useRef<number | null>(0);
+  const loading = useRef(false);
 
-  const circlePosts = [
-    ...state.publishedPosts,
-    ...CIRCLE_POSTS.filter((post) => state.following.includes(post.authorId)),
-  ];
-  const pagesRead = state.flowPagesRead.length;
+  const pagesRead = me?.stats.flowPagesRead ?? 0;
+  const points = me?.stats.points ?? 0;
   const pagesToChest = CHEST_EVERY_PAGES - (pagesRead % CHEST_EVERY_PAGES);
   const postsToChest = pagesToChest * 5;
 
-  // Flow infini : chaque nouvelle page atteinte est « lue » et créditée.
-  // TODO API : GET /api/feed/flow?page=N (le serveur crédite +10 une seule fois par page).
+  // Flow infini : chaque page atteinte est demandée au serveur, qui la crédite une seule fois.
+  // L'observateur est recréé après chaque page : il se redéclenche si le repère est encore visible.
   useEffect(() => {
     if (tab !== "flow" || !sentinel.current) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting) return;
-        readFlowPage(loadedPages.current - 1);
-        loadedPages.current += 1;
-        setFlowPages(loadedPages.current);
+        const page = nextPage.current;
+        if (!entry.isIntersecting || loading.current || page === null) return;
+        loading.current = true;
+        api
+          .get<FlowPage>(`/api/feed/flow?page=${page}`)
+          .then((response) => {
+            nextPage.current = response.nextPage;
+            setFlowPosts((posts) => [...posts, ...response.items]);
+            setFlowError("");
+            applyGains(response);
+          })
+          .catch(() => setFlowError("Le Flow s'est arrêté un instant. Fais défiler pour réessayer."))
+          .finally(() => {
+            loading.current = false;
+          });
       },
       { rootMargin: "400px" },
     );
     observer.observe(sentinel.current);
     return () => observer.disconnect();
-  }, [tab]);
+  }, [tab, flowPosts.length, flowError, api, applyGains]);
 
   return (
     <>
@@ -67,7 +82,7 @@ export default function HomePage() {
           </div>
         </div>
         <span className="flex items-baseline gap-1.5">
-          <span className="font-pixel text-sm text-lime tabular-nums">{state.points}</span>
+          <span className="font-pixel text-sm text-lime tabular-nums">{points}</span>
           <span className="text-xs text-muted">pts</span>
         </span>
       </section>
@@ -97,7 +112,8 @@ export default function HomePage() {
 
       {tab === "cercle" ? (
         <div className="flex flex-col gap-8">
-          {circlePosts.map((post) => (
+          {!circle && <div className="card h-96 animate-pulse" aria-label="Chargement du fil" />}
+          {circle?.items.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
           <div className="card flex flex-col items-center gap-3 p-6 text-center">
@@ -112,11 +128,11 @@ export default function HomePage() {
         </div>
       ) : (
         <div className="flex flex-col gap-8">
-          {Array.from({ length: flowPages }, (_, page) =>
-            flowPage(page).map((post) => <PostCard key={post.id} post={post} />),
-          )}
+          {flowPosts.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
           <div ref={sentinel} className="flex justify-center py-6 text-sm text-muted" aria-live="polite">
-            Chargement de la page {flowPages + 1}…
+            {flowError || `Chargement de la page ${flowPosts.length / 5 + 1}…`}
           </div>
         </div>
       )}

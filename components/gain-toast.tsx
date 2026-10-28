@@ -1,11 +1,11 @@
 "use client";
 
-import { useDetox } from "@/lib/store";
+import { useLastGain } from "@/lib/gains";
 import { BoltIcon } from "./icons";
 
 // Petite bulle « +10 pts » qui monte à chaque gain. La clé relance l'animation à chaque événement.
 export default function GainToast() {
-  const { lastGain } = useDetox();
+  const lastGain = useLastGain();
   if (!lastGain) return null;
 
   return (

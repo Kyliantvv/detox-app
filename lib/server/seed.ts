@@ -1,5 +1,6 @@
-// Données fictives pour la démo du front. À remplacer par les réponses de l'API (voir README).
-import type { ArtVariant, Friend, Post, ShopItem, Skill, SkillId } from "./types";
+// Données de départ de la DB mockée (lib/server/db.ts). Jamais importées par le front.
+import "server-only";
+import type { ArtVariant, Friend, Post, ShopItem, Skill, SkillId } from "../types";
 
 export const FRIENDS: Friend[] = [
   { id: "lina", username: "lina.m", name: "Lina", status: "En ligne", level: 12, hasInstant: true },
@@ -9,9 +10,12 @@ export const FRIENDS: Friend[] = [
   { id: "noah", username: "noah.detox", name: "Noah", status: "Connecté hier", level: 9, hasInstant: false },
 ];
 
-export const friendById = (id: string) => FRIENDS.find((friend) => friend.id === id);
-export const friendByUsername = (username: string) =>
-  FRIENDS.find((friend) => friend.username === username);
+// Instants (stories 24 h) en cours des comptes seedés.
+export const INSTANTS: Record<string, { art: ArtVariant; text: string; agoMs: number }> = {
+  lina: { art: "sunset", text: "Coucher de soleil. Je ne l'ai pas regardé, je l'ai filmé.", agoMs: 2 * 3_600_000 },
+  karim: { art: "ring", text: "14 jours de série. Je ne sens plus mon pouce.", agoMs: 40 * 60_000 },
+  ines: { art: "dome", text: "Pause déj = pause scroll. Ou l'inverse.", agoMs: 3 * 3_600_000 },
+};
 
 export const CIRCLE_POSTS: Post[] = [
   {
@@ -186,13 +190,6 @@ export const INTEL: Record<string, Record<Exclude<SkillId, "dossier-complet">, s
     "cercle-proche": "2 comptes",
   },
 };
-
-export const CONVERSATIONS: { id: string; friendId: string; preview: string; ago: string; unread: boolean }[] = [
-  { id: "karim", friendId: "karim", preview: "T'as vu mon ticket ? +200 ×2 encore", ago: "4 min", unread: true },
-  { id: "lina", friendId: "lina", preview: "Je fais une pause demain. Ou après-demain.", ago: "1 h", unread: false },
-  { id: "ines", friendId: "ines", preview: "Tu m'as espionnée ??", ago: "hier", unread: false },
-  { id: "noah", friendId: "noah", preview: "Ma série : 9 jours. La tienne ?", ago: "lun.", unread: false },
-];
 
 export const STARTER_MESSAGES: Record<string, { from: "me" | "them"; text: string }[]> = {
   karim: [

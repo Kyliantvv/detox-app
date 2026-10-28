@@ -2,36 +2,54 @@
 
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { useSWRConfig } from "swr";
 import Avatar from "@/components/avatar";
 import { EyeIcon, LockIcon, ShieldIcon } from "@/components/icons";
-import { FRIENDS, friendById, INTEL, SKILLS } from "@/lib/mock-data";
-import { buySkill, useDetox } from "@/lib/store";
-import type { SkillId } from "@/lib/types";
+import { ApiClientError, useApi, useApiData } from "@/lib/api-client";
+import { useApplyGains } from "@/lib/gains";
+import type { IntelKey, PublicUser, SkillId, SkillView } from "@/lib/types";
 
-const HIGHLIGHTS: { id: Exclude<SkillId, "dossier-complet">; label: string; tone: string }[] = [
+type SkillsResponse = { items: SkillView[]; intel: Partial<Record<IntelKey, string>> };
+
+const HIGHLIGHTS: { id: IntelKey; label: string; tone: string }[] = [
   { id: "solde", label: "Solde", tone: "font-pixel text-[13px] text-lime" },
   { id: "serie", label: "Série", tone: "font-display text-lg font-bold text-sun" },
   { id: "derniere-connexion", label: "Vu", tone: "font-display text-[15px] font-bold" },
 ];
 
 // Compétences d'espionnage : achat unique par cible, cible jamais notifiée, métadonnées seulement.
-// TODO API : GET /api/skills?targetId=, POST /api/skills/:skillId { targetId }.
+// Cibles : GET /api/users. Catalogue et intel débloquée : GET /api/skills?targetId=. Achat : POST /api/skills/:id.
 export default function Clairvoyance() {
-  const state = useDetox();
+  const api = useApi();
+  const applyGains = useApplyGains();
+  const { mutate } = useSWRConfig();
   const searchParams = useSearchParams();
-  const [targetId, setTargetId] = useState(() => {
-    const requested = searchParams.get("cible");
-    return requested && friendById(requested) && !friendById(requested)?.shielded ? requested : "karim";
-  });
+  const { data: users } = useApiData<{ items: PublicUser[] }>("/api/users");
+  const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  const target = friendById(targetId)!;
-  const owned = state.skills[targetId] ?? [];
-  const intel = INTEL[targetId];
+  const friends = users?.items ?? [];
+  const available = friends.filter((friend) => !friend.shielded);
+  const requested = available.find((friend) => friend.id === searchParams.get("cible"));
+  const target = available.find((friend) => friend.id === selected) ?? requested ?? available[0];
+  const skillsKey = target ? `/api/skills?targetId=${target.id}` : null;
+  const { data: skills } = useApiData<SkillsResponse>(skillsKey);
+  const owned = new Set(skills?.items.filter((skill) => skill.owned).map((skill) => skill.id));
+  const intel = skills?.intel ?? {};
 
-  const buy = (skillId: SkillId) => {
-    setError(buySkill(targetId, skillId) ?? "");
+  const buy = async (skillId: SkillId) => {
+    if (!target) return;
+    try {
+      await api.post(`/api/skills/${skillId}`, { targetId: target.id });
+      await mutate(skillsKey);
+      applyGains();
+      setError("");
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Achat impossible.");
+    }
   };
+
+  if (!target) return <div className="card h-64 animate-pulse" aria-label="Chargement des cibles" />;
 
   return (
     <>
@@ -41,20 +59,20 @@ export default function Clairvoyance() {
       </div>
 
       <ul className="flex flex-col gap-2" aria-label="Cibles">
-        {FRIENDS.map((friend) => {
-          const selected = friend.id === targetId;
+        {friends.map((friend) => {
+          const isTarget = friend.id === target.id;
           return (
             <li key={friend.id}>
               <button
                 type="button"
                 disabled={friend.shielded}
                 onClick={() => {
-                  setTargetId(friend.id);
+                  setSelected(friend.id);
                   setError("");
                 }}
-                aria-pressed={selected}
+                aria-pressed={isTarget}
                 className={`card flex w-full items-center gap-3 px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                  selected ? "border-pink" : ""
+                  isTarget ? "border-pink" : ""
                 }`}
               >
                 <Avatar name={friend.name} seed={friend.id} size={42} />
@@ -65,7 +83,7 @@ export default function Clairvoyance() {
                     {friend.status}
                   </span>
                 </span>
-                <span className={`text-sm ${selected ? "font-semibold text-pink" : "text-muted"}`}>
+                <span className={`text-sm ${isTarget ? "font-semibold text-pink" : "text-muted"}`}>
                   Niv. {friend.level}
                 </span>
               </button>
@@ -80,7 +98,7 @@ export default function Clairvoyance() {
           {HIGHLIGHTS.map(({ id, label, tone }) => (
             <div key={id} className="rounded-xl border border-line bg-panel-2 px-3 py-2.5">
               <p className="text-xs text-muted">{label}</p>
-              {owned.includes(id) ? (
+              {owned.has(id) ? (
                 <p className={`mt-1 truncate ${tone}`}>{intel[id]}</p>
               ) : (
                 <LockIcon size={18} className="mt-1.5 text-muted" />
@@ -90,8 +108,9 @@ export default function Clairvoyance() {
         </div>
 
         <ul className="flex flex-col divide-y divide-line">
-          {SKILLS.map((skill) => {
-            const unlocked = owned.includes(skill.id);
+          {!skills && <li className="h-40 animate-pulse" aria-label="Chargement des compétences" />}
+          {skills?.items.map((skill) => {
+            const unlocked = skill.owned;
             return (
               <li key={skill.id} className="flex items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">

@@ -2,16 +2,25 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useSWRConfig } from "swr";
 import { ImageIcon } from "@/components/icons";
 import TopBar, { BackLink } from "@/components/top-bar";
-import { POINTS, publishPost } from "@/lib/store";
+import { ApiClientError, useApi } from "@/lib/api-client";
+import { POINTS } from "@/lib/game";
+import { useApplyGains } from "@/lib/gains";
+import type { PointsResponse } from "@/lib/types";
+import { CAPTION_MAX } from "@/lib/validation";
 
 const MAX_SIZE_MB = 15;
 const ACCEPT = "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm";
 
-// Publier une photo ou un reel. TODO API : POST /api/posts en multipart (champ « media » + « caption »).
+// Publier une photo ou un reel : POST /api/posts en multipart (champs « media » et « caption »).
 export default function PublishPage() {
   const router = useRouter();
+  const api = useApi();
+  const applyGains = useApplyGains();
+  const { mutate } = useSWRConfig();
+  const [sending, setSending] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
@@ -30,25 +39,25 @@ export default function PublishPage() {
     setPreview(URL.createObjectURL(chosen));
   };
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!file || !preview) {
+    if (!file) {
       setError("Choisis d'abord une photo ou une vidéo.");
       return;
     }
-    publishPost({
-      id: `local-${Date.now()}`,
-      authorId: "me",
-      location: "Ici",
-      ago: "à l'instant",
-      art: "dot",
-      caption: caption.trim(),
-      doses: 0,
-      comments: [],
-      isReel: file.type.startsWith("video/"),
-      imageUrl: file.type.startsWith("image/") ? preview : undefined,
-    });
-    router.push("/");
+    const form = new FormData();
+    form.append("media", file);
+    form.append("caption", caption.trim());
+    setSending(true);
+    try {
+      const response = await api.post<PointsResponse>("/api/posts", form);
+      applyGains(response);
+      void mutate((key) => typeof key === "string" && (key.startsWith("/api/posts") || key === "/api/feed/circle"));
+      router.push(file.type.startsWith("video/") ? "/reels" : "/");
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Publication impossible.");
+      setSending(false);
+    }
   };
 
   const isVideo = file?.type.startsWith("video/");
@@ -85,7 +94,7 @@ export default function PublishPage() {
           <textarea
             id="caption"
             className="input min-h-24 py-3"
-            maxLength={300}
+            maxLength={CAPTION_MAX}
             placeholder="Raconte ta détox (ironiquement)."
             value={caption}
             onChange={(event) => setCaption(event.target.value)}
@@ -98,8 +107,8 @@ export default function PublishPage() {
           </p>
         )}
 
-        <button type="submit" className="btn-sun">
-          Publier · +{POINTS.reaction} pts
+        <button type="submit" className="btn-sun" disabled={sending}>
+          {sending ? "Publication…" : `Publier · +${POINTS.reaction} pts`}
         </button>
       </form>
     </>

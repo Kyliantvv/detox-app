@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useDetox } from "@/lib/store";
+import { useApiData } from "@/lib/api-client";
+import type { Order } from "@/lib/types";
 
-// TODO API : GET /api/orders.
 export default function OrdersPage() {
-  const { orders } = useDetox();
+  const { data } = useApiData<{ items: Order[] }>("/api/orders");
+  if (!data) return <div className="card h-32 animate-pulse" aria-label="Chargement des commandes" />;
+  const orders = data.items;
 
   return (
     <>

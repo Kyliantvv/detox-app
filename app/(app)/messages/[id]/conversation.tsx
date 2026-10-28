@@ -4,14 +4,19 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Avatar from "@/components/avatar";
 import { ChevronLeftIcon, SendIcon } from "@/components/icons";
-import { friendById } from "@/lib/mock-data";
-import { messagesFor, sendMessage, useDetox } from "@/lib/store";
+import { useApi, useApiData } from "@/lib/api-client";
+import type { ChatMessage, PublicUser } from "@/lib/types";
 
-// TODO API : GET /api/conversations/:id/messages (polling toutes les 3 s), POST pour envoyer.
-export default function Conversation({ conversationId, friendId }: { conversationId: string; friendId: string }) {
-  const state = useDetox();
-  const friend = friendById(friendId)!;
-  const messages = messagesFor(state, conversationId);
+const POLL_MS = 3000;
+
+// Fil de discussion lu en polling (GET toutes les 3 s), envoi par POST.
+export default function Conversation({ userId }: { userId: string }) {
+  const api = useApi();
+  const path = `/api/conversations/${encodeURIComponent(userId)}/messages`;
+  const { data, error, mutate } = useApiData<{ user: PublicUser; items: ChatMessage[] }>(path, {
+    refreshInterval: POLL_MS,
+  });
+  const messages = data?.items ?? [];
   const [draft, setDraft] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -19,12 +24,31 @@ export default function Conversation({ conversationId, friendId }: { conversatio
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!draft.trim()) return;
-    sendMessage(conversationId, draft.trim());
+    const text = draft.trim();
+    if (!text) return;
     setDraft("");
+    try {
+      const { message } = await api.post<{ message: ChatMessage }>(path, { text });
+      await mutate((current) => current && { ...current, items: [...current.items, message] }, { revalidate: false });
+    } catch {
+      setDraft(text);
+    }
   };
+
+  if (error?.status === 404) {
+    return (
+      <div className="card flex flex-col items-center gap-3 p-6 text-center">
+        <p className="font-display text-lg font-bold">Conversation introuvable.</p>
+        <Link href="/messages" className="btn-ghost">
+          Retour aux messages
+        </Link>
+      </div>
+    );
+  }
+  if (!data) return <div className="h-14 animate-pulse rounded-xl bg-panel" aria-label="Chargement de la conversation" />;
+  const friend = data.user;
 
   return (
     <>

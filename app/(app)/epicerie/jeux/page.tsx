@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { buyTicket, scratchCell, TICKET_PRICE, ticketWinnings, useDetox } from "@/lib/store";
-import type { Ticket } from "@/lib/types";
+import { useSWRConfig } from "swr";
+import { ApiClientError, useApi, useApiData, useMe } from "@/lib/api-client";
+import { TICKET_PRICE } from "@/lib/game";
+import { useApplyGains } from "@/lib/gains";
+import type { PointsResponse, TicketView } from "@/lib/types";
+
+type TicketResponse = { ticket: TicketView };
 
 function valueTone(value: number) {
   if (value === 0) return "text-muted";
@@ -12,11 +17,12 @@ function valueTone(value: number) {
   return "text-lime";
 }
 
-function verdict(ticket: Ticket) {
+// Les cases non grattées arrivent à null : le serveur ne les dévoile qu'au grattage.
+function verdict(ticket: TicketView) {
   const remaining = ticket.revealed.filter((revealed) => !revealed).length;
-  const shown = ticket.cells.filter((_, index) => ticket.revealed[index]);
+  const shown = ticket.cells.filter((value) => value !== null);
   if (remaining === 0) {
-    const win = ticketWinnings(ticket);
+    const win = ticket.winnings ?? 0;
     return win > 0
       ? { lead: "Gagné.", text: `Trois +${win} identiques : +${win} pts. Tu rejoues ?` }
       : { lead: "Perdu.", text: "Presque. Vraiment presque. Le prochain sera le bon." };
@@ -31,15 +37,36 @@ function verdict(ticket: Ticket) {
   return { lead: "Gratte.", text: "Trois montants identiques et ils sont à toi." };
 }
 
-// Ticket à gratter. TODO API : POST /api/dice (le tirage est fait par le serveur, jamais par le client).
+// Ticket à gratter : tirage (POST /api/dice) et grattage (POST /api/ticket/scratch) faits par le serveur.
 export default function GamesPage() {
-  const { ticket, points } = useDetox();
+  const api = useApi();
+  const applyGains = useApplyGains();
+  const { mutate } = useSWRConfig();
+  const { data: me } = useMe();
+  // 404 = aucun ticket en cours : pas la peine de réessayer.
+  const { data } = useApiData<TicketResponse>("/api/ticket", { shouldRetryOnError: false });
+  const ticket = data?.ticket ?? null;
+  const points = me?.stats.points ?? 0;
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const newTicket = () => {
-    const outcome = buyTicket();
-    setError(outcome.ok ? "" : outcome.reason);
+  const play = async (request: () => Promise<TicketResponse & Partial<PointsResponse>>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const response = await request();
+      await mutate("/api/ticket", { ticket: response.ticket }, { revalidate: false });
+      applyGains(response);
+      setError("");
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Le ticket ne répond pas.");
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const newTicket = () => play(() => api.post("/api/dice"));
+  const scratchCell = (index: number) => play(() => api.post("/api/ticket/scratch", { index }));
 
   const remaining = ticket ? ticket.revealed.filter((revealed) => !revealed).length : 0;
   const message = ticket ? verdict(ticket) : null;
@@ -59,7 +86,7 @@ export default function GamesPage() {
           </div>
           <div className="grid grid-cols-3 gap-2.5">
             {ticket.cells.map((value, index) =>
-              ticket.revealed[index] ? (
+              value !== null ? (
                 <div
                   key={index}
                   className={`grid aspect-square animate-pop place-items-center rounded-2xl border border-line bg-ink font-display font-bold ${

@@ -92,8 +92,81 @@ export type Ticket = {
   paidOut: boolean;
 };
 
-export type User = {
-  email: string;
+export type IntelKey = Exclude<SkillId, "dossier-complet">;
+
+// ---------- Réponses de l'API (partagées entre lib/server/views.ts et le front) ----------
+
+export type PublicUser = {
+  id: string;
   username: string;
+  name: string;
   bio: string;
+  status: string;
+  level: number;
+  hasInstant: boolean;
+  shielded: boolean;
+  followers: number;
+  following: number;
+  followedByMe?: boolean;
 };
+
+export type Me = PublicUser & { email: string };
+
+export type Stats = {
+  points: number;
+  totalEarned: number;
+  totalSpent: number;
+  bestGain: number;
+  earnedToday: number;
+  streak: number;
+  serenity: number;
+  level: number;
+  flowPagesRead: number;
+  dosesGiven: number;
+  orders: number;
+  friendsSpied: number;
+  timeSpentMs: number;
+  events: PointEvent[];
+};
+
+export type PostAuthor = { id: string; username: string; name: string };
+
+export type PostView = Post & {
+  author: PostAuthor | null;
+  dosedByMe: boolean;
+  savedByMe: boolean;
+  videoUrl?: string;
+};
+
+export type ExploreTile = { id: string; art: ArtVariant; tags: string[] };
+
+export type StoryItem = PostAuthor & { instant: { art: ArtVariant; text: string; ago: string } | null };
+
+export type TicketView = {
+  cells: (number | null)[];
+  revealed: boolean[];
+  paidOut: boolean;
+  winnings: number | null;
+};
+
+export type ConversationItem = {
+  id: string;
+  user: PostAuthor;
+  preview: string;
+  fromMe: boolean;
+  ago: string;
+  at: number;
+  unread: boolean;
+};
+
+export type SkillView = Skill & { owned: boolean };
+
+// Toute action qui touche aux points renvoie le nouveau solde et les gains à afficher.
+export type PointsResponse = { points: number; gains: PointEvent[] };
+
+export type Purchase =
+  | { kind: "order"; order: Order }
+  | { kind: "ticket"; ticket: TicketView }
+  | { kind: "lootbox"; prize: string };
+
+export type ApiErrorBody = { error: { code: string; message: string } };

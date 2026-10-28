@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import TopBar, { BackLink } from "@/components/top-bar";
-import { useDetox } from "@/lib/store";
+import { useMe } from "@/lib/api-client";
 
 function formatDuration(ms: number) {
   const minutes = Math.floor(ms / 60_000);
@@ -20,34 +19,20 @@ function serenityLabel(value: number) {
 }
 
 // Écran de fin de démo : ce que l'appli t'a coûté, et ce qu'elle t'a donné (rien).
+// Les chiffres viennent de GET /api/me : le temps passé est mesuré par le serveur (temps actif).
 export default function BilanPage() {
-  const state = useDetox();
-  const [now, setNow] = useState<number | null>(null);
-
-  useEffect(() => {
-    const tick = () => setNow(Date.now());
-    const first = window.setTimeout(tick, 0);
-    const timer = window.setInterval(tick, 30_000);
-    return () => {
-      window.clearTimeout(first);
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  const timeSpent =
-    state.timeSpentMs + (state.sessionStartedAt && now ? Math.max(0, now - state.sessionStartedAt) : 0);
+  const { data } = useMe();
+  if (!data) return <div className="card h-96 animate-pulse" aria-label="Chargement du bilan" />;
+  const { stats } = data;
 
   const rows = [
-    { label: "Temps passé", value: formatDuration(timeSpent) },
-    { label: "Pages de Flow lues", value: state.flowPagesRead.length },
-    { label: "Bonnes doses données", value: state.dosedPostIds.length },
-    { label: "Points gagnés", value: `${state.totalEarned.toLocaleString("fr-FR")} pts`, tone: "text-lime" },
-    { label: "Points dépensés", value: `${state.totalSpent.toLocaleString("fr-FR")} pts`, tone: "text-sun" },
-    { label: "Commandes passées", value: state.orders.length },
-    {
-      label: "Amis espionnés",
-      value: Object.values(state.skills).filter((skills) => skills.length > 0).length,
-    },
+    { label: "Temps passé", value: formatDuration(stats.timeSpentMs) },
+    { label: "Pages de Flow lues", value: stats.flowPagesRead },
+    { label: "Bonnes doses données", value: stats.dosesGiven },
+    { label: "Points gagnés", value: `${stats.totalEarned.toLocaleString("fr-FR")} pts`, tone: "text-lime" },
+    { label: "Points dépensés", value: `${stats.totalSpent.toLocaleString("fr-FR")} pts`, tone: "text-sun" },
+    { label: "Commandes passées", value: stats.orders },
+    { label: "Amis espionnés", value: stats.friendsSpied },
   ];
 
   return (
@@ -59,17 +44,17 @@ export default function BilanPage() {
       <section className="card flex flex-col gap-3 p-5" aria-label="Sérénité">
         <div className="flex items-baseline justify-between">
           <p className="font-semibold">Sérénité</p>
-          <p className="font-pixel text-sm">{state.serenity}%</p>
+          <p className="font-pixel text-sm">{stats.serenity}%</p>
         </div>
         <div className="h-3 overflow-hidden rounded-full bg-line">
           <div
             className={`h-full rounded-full transition-[width] duration-700 ${
-              state.serenity > 50 ? "bg-lime" : state.serenity > 20 ? "bg-sun" : "bg-pink"
+              stats.serenity > 50 ? "bg-lime" : stats.serenity > 20 ? "bg-sun" : "bg-pink"
             }`}
-            style={{ width: `${state.serenity}%` }}
+            style={{ width: `${stats.serenity}%` }}
           />
         </div>
-        <p className="text-sm text-muted">{serenityLabel(state.serenity)}</p>
+        <p className="text-sm text-muted">{serenityLabel(stats.serenity)}</p>
       </section>
 
       <dl className="card divide-y divide-line px-5">

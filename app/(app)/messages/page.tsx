@@ -3,23 +3,25 @@
 import Link from "next/link";
 import Avatar from "@/components/avatar";
 import TopBar from "@/components/top-bar";
-import { CONVERSATIONS, friendById } from "@/lib/mock-data";
-import { messagesFor, useDetox } from "@/lib/store";
+import { useApiData } from "@/lib/api-client";
+import type { ConversationItem } from "@/lib/types";
 
-// TODO API : GET /api/conversations.
+const REFRESH_MS = 10_000;
+
 export default function MessagesPage() {
-  const state = useDetox();
+  const { data } = useApiData<{ items: ConversationItem[] }>("/api/conversations", { refreshInterval: REFRESH_MS });
 
   return (
     <>
       <TopBar />
       <h1 className="font-display text-[28px] font-bold">Messages</h1>
       <ul className="flex flex-col gap-2">
-        {CONVERSATIONS.map((conversation) => {
-          const friend = friendById(conversation.friendId)!;
-          const messages = messagesFor(state, conversation.id);
-          const last = messages.at(-1);
-          const unread = conversation.unread && !state.messages[conversation.id];
+        {!data && <li className="card h-40 animate-pulse" aria-label="Chargement des conversations" />}
+        {data?.items.length === 0 && (
+          <li className="py-10 text-center text-muted">Aucune conversation. Tes amis scrollent, eux.</li>
+        )}
+        {data?.items.map((conversation) => {
+          const { user: friend, unread } = conversation;
           return (
             <li key={conversation.id}>
               <Link href={`/messages/${conversation.id}`} className="card flex items-center gap-3 px-4 py-3">
@@ -27,11 +29,11 @@ export default function MessagesPage() {
                 <div className="min-w-0 flex-1">
                   <p className={`font-semibold ${unread ? "text-fg" : ""}`}>{friend.username}</p>
                   <p className={`truncate text-sm ${unread ? "font-semibold text-fg" : "text-muted"}`}>
-                    {last ? `${last.from === "me" ? "Toi : " : ""}${last.text}` : conversation.preview}
+                    {`${conversation.fromMe ? "Toi : " : ""}${conversation.preview}`}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
-                  <span className="text-xs text-muted">{state.messages[conversation.id] ? "à l'instant" : conversation.ago}</span>
+                  <span className="text-xs text-muted">{conversation.ago}</span>
                   {unread && <span className="size-2.5 rounded-full bg-pink" aria-label="Non lu" />}
                 </div>
               </Link>

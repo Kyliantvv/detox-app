@@ -3,11 +3,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState, type ComponentType } from "react";
+import { useSWRConfig } from "swr";
 import Dialog from "@/components/dialog";
 import { BoltIcon, CigaretteIcon, GiftIcon, SugarIcon, TicketIcon } from "@/components/icons";
-import { SHOP_ITEMS } from "@/lib/mock-data";
-import { buyItem, POINTS, useDetox, type PurchaseResult } from "@/lib/store";
-import type { ShopItemId } from "@/lib/types";
+import { ApiClientError, useApi, useApiData, useMe } from "@/lib/api-client";
+import { POINTS } from "@/lib/game";
+import { useApplyGains } from "@/lib/gains";
+import type { PointsResponse, Purchase, ShopItem, ShopItemId } from "@/lib/types";
+
+type PurchaseResult = { ok: false; reason: string } | ({ ok: true } & Purchase);
 
 const ICONS: Record<ShopItemId, { Icon: ComponentType<{ size?: number }>; color: string }> = {
   sucre: { Icon: SugarIcon, color: "text-fg" },
@@ -16,20 +20,38 @@ const ICONS: Record<ShopItemId, { Icon: ComponentType<{ size?: number }>; color:
   cigarettes: { Icon: CigaretteIcon, color: "text-sun" },
 };
 
-// TODO API : GET /api/shop pour la liste, POST /api/orders pour acheter (débit atomique côté serveur).
+// Catalogue : GET /api/shop. Achat : POST /api/orders (débit atomique et tirages côté serveur).
 export default function GroceryPage() {
-  const state = useDetox();
+  const api = useApi();
+  const applyGains = useApplyGains();
+  const { mutate } = useSWRConfig();
+  const { data: me } = useMe();
+  const { data: shop } = useApiData<{ items: ShopItem[] }>("/api/shop");
   const router = useRouter();
   const [result, setResult] = useState<PurchaseResult | null>(null);
+  const [buying, setBuying] = useState(false);
   const close = useCallback(() => setResult(null), []);
+  const points = me?.stats.points ?? 0;
+  const pagesRead = me?.stats.flowPagesRead ?? 0;
 
-  const buy = (itemId: ShopItemId) => {
-    const outcome = buyItem(itemId);
-    if (outcome.ok && outcome.kind === "ticket") {
-      router.push("/epicerie/jeux");
-      return;
+  const buy = async (itemId: ShopItemId) => {
+    setBuying(true);
+    try {
+      const purchase = await api.post<Purchase & PointsResponse>("/api/orders", { itemId });
+      applyGains(purchase);
+      void mutate("/api/orders");
+      if (purchase.kind === "ticket") {
+        await mutate("/api/ticket", { ticket: purchase.ticket }, { revalidate: false });
+        router.push("/epicerie/jeux");
+        return;
+      }
+      if (purchase.kind === "lootbox") void mutate("/api/ticket");
+      setResult({ ok: true, ...purchase });
+    } catch (error) {
+      setResult({ ok: false, reason: error instanceof ApiClientError ? error.message : "Achat impossible." });
+    } finally {
+      setBuying(false);
     }
-    setResult(outcome);
   };
 
   return (
@@ -38,18 +60,19 @@ export default function GroceryPage() {
         <BoltIcon size={20} className="shrink-0 text-lime" />
         <div>
           <p className="font-semibold">
-            +{state.flowPagesRead.length * POINTS.flowPage} pts gagnés en scrollant aujourd&apos;hui
+            +{pagesRead * POINTS.flowPage} pts gagnés en scrollant
           </p>
           <p className="text-sm text-muted">
-            {state.flowPagesRead.length * 5} posts vus. Plus tu scrolles, plus tu peux t&apos;offrir.
+            {pagesRead * 5} posts vus. Plus tu scrolles, plus tu peux t&apos;offrir.
           </p>
         </div>
       </section>
 
       <ul className="flex flex-col gap-3">
-        {SHOP_ITEMS.map((item) => {
+        {!shop && <li className="card h-64 animate-pulse" aria-label="Chargement des objets" />}
+        {shop?.items.map((item) => {
           const { Icon, color } = ICONS[item.id];
-          const affordable = state.points >= item.price;
+          const affordable = points >= item.price;
           return (
             <li key={item.id} className="card flex items-center gap-4 p-4">
               <span className={`grid size-12 shrink-0 place-items-center rounded-xl border border-line bg-ink ${color}`}>
@@ -63,6 +86,7 @@ export default function GroceryPage() {
               <button
                 type="button"
                 onClick={() => buy(item.id)}
+                disabled={buying}
                 className={`btn shrink-0 px-3 text-[15px] ${affordable ? "bg-sun text-ink" : "border border-line bg-panel-2 text-muted"}`}
                 aria-label={`Acheter ${item.name} pour ${item.price} points`}
               >
@@ -74,7 +98,7 @@ export default function GroceryPage() {
       </ul>
 
       <Link href="/epicerie/commandes" className="btn-ghost">
-        Mes commandes ({state.orders.length})
+        Mes commandes ({me?.stats.orders ?? 0})
       </Link>
 
       {result && !result.ok && (

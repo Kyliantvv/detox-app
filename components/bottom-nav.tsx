@@ -1,8 +1,8 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useDetox } from "@/lib/store";
 import Avatar from "./avatar";
 import { BagIcon, HomeIcon, ReelsIcon, SearchIcon, SendIcon } from "./icons";
 
@@ -19,7 +19,7 @@ const isActive = (pathname: string, href: string) =>
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { user } = useDetox();
+  const { data: session } = useSession();
   const profileActive = isActive(pathname, "/profil");
 
   return (
@@ -50,7 +50,7 @@ export default function BottomNav() {
         className="grid place-items-center"
       >
         <span className={`rounded-full ${profileActive ? "ring-2 ring-pink ring-offset-2 ring-offset-ink" : ""}`}>
-          <Avatar name={user?.username ?? "?"} size={28} />
+          <Avatar name={session?.user.username ?? "?"} size={28} />
         </span>
       </Link>
     </nav>

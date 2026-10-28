@@ -1,24 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Artwork from "@/components/artwork";
 import Avatar from "@/components/avatar";
 import { SearchIcon } from "@/components/icons";
-import { EXPLORE_TILES, FRIENDS } from "@/lib/mock-data";
+import { useApiData } from "@/lib/api-client";
+import type { ExploreTile, PublicUser } from "@/lib/types";
 
 const FILTERS = ["Pour toi", "Tendances", "Amis", "Voyage"];
+const DEBOUNCE_MS = 250;
 
-// TODO API : GET /api/users?q= pour les comptes, GET /api/posts?explore=1 pour la mosaïque.
+// Recherche de comptes (GET /api/users?q=) et mosaïque d'exploration (GET /api/posts?explore=1).
 export default function SearchPage() {
   const [query, setQuery] = useState("");
+  const [q, setQ] = useState("");
   const [filter, setFilter] = useState(FILTERS[0]);
 
-  const q = query.trim().toLowerCase();
-  const accounts = FRIENDS.filter(
-    (friend) => friend.username.includes(q) || friend.name.toLowerCase().includes(q),
-  );
-  const tiles = EXPLORE_TILES.filter((tile) => tile.tags.includes(filter));
+  useEffect(() => {
+    const timer = window.setTimeout(() => setQ(query.trim()), DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const { data: found } = useApiData<{ items: PublicUser[] }>(q ? `/api/users?q=${encodeURIComponent(q)}` : null, {
+    keepPreviousData: true,
+  });
+  const { data: explore } = useApiData<{ items: ExploreTile[] }>("/api/posts?explore=1");
+  const accounts = found?.items ?? [];
+  const tiles = (explore?.items ?? []).filter((tile) => tile.tags.includes(filter));
 
   return (
     <>
@@ -34,9 +43,9 @@ export default function SearchPage() {
         />
       </label>
 
-      {q ? (
+      {query.trim() ? (
         <ul className="flex flex-col gap-1" aria-label="Comptes">
-          {accounts.length === 0 && (
+          {found && accounts.length === 0 && (
             <li className="py-10 text-center text-muted">
               Aucun compte pour « {query} ». Personne n&apos;a encore pensé à se détoxer sous ce nom.
             </li>

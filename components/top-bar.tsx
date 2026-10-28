@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useDetox } from "@/lib/store";
+import { useMe } from "@/lib/api-client";
 import { BoltIcon, FlameIcon } from "./icons";
 
 export function PointsPill({ value }: { value: number }) {
@@ -33,7 +33,9 @@ export function Brand() {
 
 // En-tête des écrans : logo à gauche, série + solde à droite (ou contenu personnalisé).
 export default function TopBar({ title, right }: { title?: ReactNode; right?: ReactNode }) {
-  const { points, streak } = useDetox();
+  const { data } = useMe();
+  const points = data?.stats.points ?? 0;
+  const streak = data?.stats.streak ?? 0;
   return (
     <header className="flex min-h-11 items-center justify-between gap-3">
       {title ?? <Brand />}

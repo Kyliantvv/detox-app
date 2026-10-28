@@ -1,42 +1,106 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { friendById } from "@/lib/mock-data";
-import { addComment, POINTS, toggleDose, toggleSave, useDetox } from "@/lib/store";
-import type { Post } from "@/lib/types";
+import { useApi } from "@/lib/api-client";
+import { POINTS } from "@/lib/game";
+import { useApplyGains } from "@/lib/gains";
+import type { PointsResponse, PostView } from "@/lib/types";
 import Artwork from "./artwork";
 import Avatar from "./avatar";
 import { BoltIcon, BookmarkIcon, CommentIcon, HeartIcon, MoreIcon, SendIcon } from "./icons";
 
 const formatCount = (n: number) => n.toLocaleString("fr-FR");
 
-export default function PostCard({ post }: { post: Post }) {
-  const state = useDetox();
+type DoseResponse = Partial<PointsResponse> & { doses: number; dosedByMe: boolean };
+
+// Bonne dose (like) avec mise à jour optimiste, partagée par les posts et les reels.
+export function useDose(post: PostView) {
+  const api = useApi();
+  const applyGains = useApplyGains();
+  const [dosed, setDosed] = useState(post.dosedByMe);
+  const [doses, setDoses] = useState(post.doses);
+
+  const toggle = async () => {
+    const next = !dosed;
+    setDosed(next);
+    setDoses((n) => n + (next ? 1 : -1));
+    try {
+      const path = `/api/posts/${post.id}/likes`;
+      const response = next ? await api.post<DoseResponse>(path) : await api.del<DoseResponse>(path);
+      setDosed(response.dosedByMe);
+      setDoses(response.doses);
+      applyGains(response);
+    } catch {
+      setDosed(!next);
+      setDoses((n) => n + (next ? -1 : 1));
+    }
+  };
+
+  return { dosed, doses, toggle };
+}
+
+export function PostMedia({ post, className = "h-full w-full object-cover" }: { post: PostView; className?: string }) {
+  if (post.imageUrl) {
+    // eslint-disable-next-line @next/next/no-img-element -- média servi par /api/media (session requise)
+    return <img src={post.imageUrl} alt={post.caption} className={className} />;
+  }
+  if (post.videoUrl) {
+    return <video src={post.videoUrl} className={className} muted loop autoPlay playsInline aria-label={post.caption} />;
+  }
+  return <Artwork variant={post.art} label={post.caption} />;
+}
+
+export default function PostCard({ post }: { post: PostView }) {
+  const api = useApi();
+  const applyGains = useApplyGains();
+  const { data: session } = useSession();
+  const { dosed, doses, toggle } = useDose(post);
+  const [saved, setSaved] = useState(post.savedByMe);
+  const [comments, setComments] = useState(post.comments);
   const [commenting, setCommenting] = useState(false);
   const [draft, setDraft] = useState("");
 
-  const author = friendById(post.authorId);
-  const username = author?.username ?? state.user?.username ?? "toi";
-  const dosed = state.dosedPostIds.includes(post.id);
-  const saved = state.savedPostIds.includes(post.id);
-  const comments = [...post.comments, ...(state.comments[post.id] ?? [])];
+  const username = post.author?.username ?? "compte supprimé";
+  const profileHref = !post.author || post.author.id === session?.user.id ? "/profil" : `/u/${post.author.username}`;
 
-  const submitComment = (event: FormEvent) => {
+  const toggleSave = async () => {
+    const next = !saved;
+    setSaved(next);
+    try {
+      const path = `/api/posts/${post.id}/saves`;
+      await (next ? api.post(path) : api.del(path));
+    } catch {
+      setSaved(!next);
+    }
+  };
+
+  const submitComment = async (event: FormEvent) => {
     event.preventDefault();
-    if (!draft.trim()) return;
-    addComment(post.id, draft.trim());
+    const text = draft.trim();
+    if (!text) return;
     setDraft("");
+    try {
+      const response = await api.post<PointsResponse & { comment: PostView["comments"][number] }>(
+        `/api/posts/${post.id}/comments`,
+        { text },
+      );
+      setComments((list) => [...list, response.comment]);
+      applyGains(response);
+    } catch {
+      setDraft(text);
+    }
   };
 
   return (
     <article className="-mx-4 flex flex-col">
       <header className="flex items-center gap-3 px-4 pb-3">
-        <Link href={author ? `/u/${author.username}` : "/profil"}>
-          <Avatar name={username} seed={author?.id ?? username} size={36} />
+        <Link href={profileHref}>
+          <Avatar name={post.author?.name ?? username} seed={post.author?.id ?? username} size={36} />
         </Link>
         <div className="min-w-0 flex-1 leading-tight">
-          <Link href={author ? `/u/${author.username}` : "/profil"} className="font-semibold">
+          <Link href={profileHref} className="font-semibold">
             {username}
           </Link>
           <p className="text-[13px] text-muted">
@@ -48,16 +112,8 @@ export default function PostCard({ post }: { post: Post }) {
         </button>
       </header>
 
-      <div
-        className="relative aspect-square select-none"
-        onDoubleClick={() => !dosed && toggleDose(post.id)}
-      >
-        {post.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- aperçu local (URL blob)
-          <img src={post.imageUrl} alt={post.caption} className="h-full w-full object-cover" />
-        ) : (
-          <Artwork variant={post.art} label={post.caption} />
-        )}
+      <div className="relative aspect-square select-none" onDoubleClick={() => !dosed && toggle()}>
+        <PostMedia post={post} />
         {!dosed && (
           <span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full border border-lime bg-ink/80 px-2.5 py-1 text-xs font-semibold text-lime">
             <BoltIcon size={11} /> +{POINTS.dose} pts
@@ -68,7 +124,7 @@ export default function PostCard({ post }: { post: Post }) {
       <div className="flex items-center gap-4 px-4 pt-3">
         <button
           type="button"
-          onClick={() => toggleDose(post.id)}
+          onClick={toggle}
           aria-pressed={dosed}
           aria-label={dosed ? "Retirer la Bonne dose" : "Donner une Bonne dose"}
           className={dosed ? "animate-pop text-pink" : "text-fg"}
@@ -88,7 +144,7 @@ export default function PostCard({ post }: { post: Post }) {
         </Link>
         <button
           type="button"
-          onClick={() => toggleSave(post.id)}
+          onClick={toggleSave}
           aria-pressed={saved}
           aria-label={saved ? "Retirer des enregistrements" : "Enregistrer"}
           className="ml-auto"
@@ -98,9 +154,7 @@ export default function PostCard({ post }: { post: Post }) {
       </div>
 
       <div className="flex flex-col gap-1 px-4 pt-2 text-[15px]">
-        <p className="font-semibold">
-          {formatCount(post.doses + (dosed ? 1 : 0))} Bonnes doses
-        </p>
+        <p className="font-semibold">{formatCount(doses)} Bonnes doses</p>
         <p>
           <span className="font-semibold">{username}</span> {post.caption}
         </p>
