@@ -10,23 +10,63 @@ Détox a la forme d'Instagram (fil, stories, reels, messages, recherche, profil)
 
 ## Stack
 
-- **Front** : React + Vite, JavaScript, React Router
-- **Back** : Node.js + Express (routes / contrôleurs / services / modèles)
-- **Base** : MongoDB + Mongoose ; médias sur disque via Multer (`uploads/`)
-- **Sécurité** : bcrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
-- **Qualité** : ESLint, Jest + Supertest, Swagger/OpenAPI
-- **Lancement** : monorepo `frontend/` + `backend/`, `docker compose up` (mongo, backend, frontend)
+- **App** : Next.js 16 (App Router), React, TypeScript ; l'API vit dans `app/api/`
+- **Médias** : UploadThing via `files-sdk` (route `/api/files`)
+- **Base** : MongoDB Atlas + Prisma 6 (`prisma/schema.prisma`, `lib/db/`) ; MongoDB en Docker pour le dev et les tests (`compose.yaml`)
+- **Sécurité** (prévu) : bcrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
+- **Qualité** : ESLint, Vitest + Supertest ; Swagger/OpenAPI prévu
+- **Commits** : [Conventional Commits](https://www.conventionalcommits.org/fr/) (`feat:`, `fix:`, `test:`…), vérifiés par commitlint (hook `commit-msg` + CI)
+- **Lancement** : une seule app Next.js, voir ci-dessous
+
+**Pourquoi Vitest plutôt que Jest**
+
+- **Compatibilité ESM** : `files-sdk` (entre autres) est publié uniquement en ESM. Jest fonctionne mal avec l'ESM; Vitest fonctionne avec l'ESM nativement.
+- **TypeScript sans configuration** : pas de Babel, `ts-jest` ni `ts-node`, et aucun fichier de config.
+- **Même API que Jest** : `describe`, `it`, `expect` et les mêmes matchers, donc rien à réapprendre. Supertest fonctionne pareil.
 
 ## Lancer le projet
 
+Prérequis : Node.js 22 et pnpm 10.
+
 ```bash
-cp backend/.env.example backend/.env   # puis renseigner JWT_SECRET
-docker compose up --build
+pnpm install
+cp .env.example .env   # puis renseigner les variables ci-dessous
+pnpm dev
 ```
 
-- App : http://localhost:5173
-- API : http://localhost:3000/api (santé : `GET /api/health`)
-- Swagger : http://localhost:3000/api/docs
+- App : http://localhost:3000
+
+**Variables d'environnement**
+
+| Variable | Rôle |
+|---|---|
+| `UPLOADTHING_TOKEN` | Clé d'API UploadThing (dashboard UploadThing → API Keys) |
+| `FILES_API_SECRET` | Secret qui signe les envois de fichiers (`openssl rand -hex 32`) |
+
+Le build passe sans ces variables. En production, `/api/files` renvoie une erreur 500 tant que `FILES_API_SECRET` manque : sans lui, chaque instance signerait les envois avec son propre secret et les envois échoueraient au hasard.
+
+**Scripts**
+
+| Commande | Rôle |
+|---|---|
+| `pnpm dev` | Serveur de développement |
+| `pnpm build` | Build de production |
+| `pnpm lint` | ESLint |
+| `pnpm typecheck` | Génère les types des routes Next.js, puis lance `tsc` |
+| `pnpm test` | Tests Vitest |
+| `pnpm db:indexes` | Crée les collections et index MongoDB (voir [docs/db](docs/db/README.md)) |
+| `pnpm db:seed` | Remplit L'Épicerie et crée des comptes de démo avec abonnements, likes et soldes (`--users 100 --posts 500 --follows 20 --likes 10` par défaut) |
+
+La CI lance `lint`, `typecheck`, `test` et `build` sur chaque PR, et vérifie les messages de commit avec commitlint.
+
+**Envoi de fichiers**
+
+Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadThing. Règles appliquées par le serveur :
+
+- Images uniquement : AVIF, GIF, JPEG, PNG, WebP. Le serveur vérifie le type déclaré et les premiers octets du fichier. Le SVG est refusé, car il peut contenir des scripts.
+- 4 Mo maximum par fichier (la limite de Vercel est de 4,5 Mo par requête).
+- Le serveur choisit le nom du fichier ; un client ne peut pas écraser un fichier existant.
+- Pas encore d'authentification : n'importe qui peut envoyer une image et obtenir son URL publique.
 
 ## Contrat d'API
 
@@ -66,6 +106,10 @@ Variables (voir `.env.example`, à copier en `.env.local`) : `JWT_SECRET` et `AU
 | Clairvoyance | `GET skills?targetId=`, `POST skills/:skillId` |
 | Messages | `GET conversations`, `GET/POST conversations/:id/messages` (en polling) |
 
+## Base de données
+
+Mise en route (Docker ou Atlas), collections et règles d'usage : [docs/db/README.md](docs/db/README.md). Modèle MERISE (MCD, MLD, MPD) : [docs/db/merise.md](docs/db/merise.md).
+
 ## Vocabulaire
 
 | Terme | Sens dans l'app |
@@ -80,7 +124,7 @@ Variables (voir `.env.example`, à copier en `.env.local`) : `JWT_SECRET` et `AU
 
 ## Économie de points
 
-Tout est calculé côté serveur : chaque gain est un `PointEvent`, chaque débit un `$inc` atomique avec condition de solde suffisant.
+Tout est calculé côté serveur : chaque gain ou débit écrit un `PointEvent` et le solde dans la même transaction ; un débit exige un solde suffisant.
 
 | Action | Gain |
 |---|---|
