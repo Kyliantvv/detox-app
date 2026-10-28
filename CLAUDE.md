@@ -29,6 +29,7 @@ docker compose up -d --wait   # MongoDB 7 en replica set sur 27017
 pnpm db:indexes               # prisma db push + index que Prisma ne sait pas décrire
 pnpm db:seed                  # boutique, comptes de la maquette (@detox.test) et aléatoires (@seed.detox.local)
 pnpm db:smoke                 # vérifie en lecture seule que la base est prête
+pnpm db:ping                  # test de connexion + nombre de documents par collection
 pnpm exec prisma generate     # après un changement de prisma/schema.prisma, puis pnpm db:indexes
 TEST_MONGODB_URI="mongodb://localhost:27017/detox_test?directConnection=true" pnpm test   # + tests de routes et lib/db
 ```
@@ -148,7 +149,8 @@ Deux projets dans `vitest.config.mts` :
 
 - `check` : lint, typecheck, tests unitaires, build.
 - `db` : MongoDB du `compose.yaml`, `db:indexes`, seed deux fois, `db:smoke`, puis toute la suite sur `detox_test`.
-- `prod` : après un push sur `main` seulement, `db:indexes`, `db:seed` et `db:smoke` sur la base du secret `MONGODB_URI_PROD` (environnement GitHub `production`). Jamais de tests sur cette base.
+- `prod-smoke.yml` : après un push sur `main`, `pnpm db:ping` sur la base du secret `MONGODB_URI_PROD` (environnement GitHub `production`) : test de connexion et nombre de documents par collection, en lecture seule. Jamais de tests, de seed ni de `db:indexes` sur cette base.
+- `deploy-vercel.yml` : après un push sur `main`, déploie en production avec le CLI Vercel une fois approuvé (relecteurs requis de l'environnement `vercel-production`). Secrets : `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
 
 ### Pièges Next 16 rencontrés
 

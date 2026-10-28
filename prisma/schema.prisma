@@ -1,11 +1,3 @@
-// Schéma de la base MongoDB. `pnpm db:indexes` crée les collections et les
-// index déclarés ici, puis ceux que Prisma ne sait pas décrire (index uniques
-// partiels, TTL) : voir lib/db/indexes.ts.
-//
-// Prisma ne valide ni longueur ni minimum : lib/db/validation.ts s'en charge.
-// Les relations Prisma sont émulées sur MongoDB : `onDelete: Cascade`
-// supprime les documents liés, sans toucher aux compteurs dénormalisés.
-
 generator client {
   provider = "prisma-client-js"
 }

@@ -1,0 +1,39 @@
+name: Deploy Vercel
+
+# Déploie en production après un push sur main, une fois approuvé sur GitHub : le job
+# attend la validation d'un relecteur de l'environnement « vercel-production »
+# (Settings → Environments → vercel-production → Required reviewers).
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: vercel-production
+    # Un seul déploiement à la fois, sans annuler celui qui est en cours.
+    concurrency:
+      group: vercel-production
+      cancel-in-progress: false
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Vérifie les secrets
+        run: |
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            test -n "${!name}" || { echo "Secret $name manquant (environnement vercel-production)"; exit 1; }
+          done
+      # Récupère la config du projet et les variables d'environnement de production.
+      - run: pnpm dlx vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - run: pnpm dlx vercel@latest build --prod --token="$VERCEL_TOKEN"
+      - run: pnpm dlx vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"

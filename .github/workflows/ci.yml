@@ -2,8 +2,9 @@ name: CI
 
 on:
   pull_request:
+    branches: [dev, main]
   push:
-    branches: [main]
+    branches: [dev, main]
 
 jobs:
   check:
@@ -69,35 +70,3 @@ jobs:
           TEST_MONGODB_URI: mongodb://localhost:27017/detox_test?directConnection=true
       - if: failure()
         run: docker compose logs mongo
-
-  # Base de production (MongoDB Atlas) : schéma et index, seed, puis smoke test en
-  # lecture seule. Uniquement après un push sur main, une fois les tests passés.
-  # L'URL vient du secret MONGODB_URI_PROD de l'environnement GitHub « production » ;
-  # les tests, eux, ne tournent jamais sur cette base.
-  prod:
-    needs: [check, db]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: production
-    # Deux pushes rapprochés sur main ne seedent pas la prod en même temps.
-    concurrency:
-      group: prod-db
-      cancel-in-progress: false
-    env:
-      MONGODB_URI: ${{ secrets.MONGODB_URI_PROD }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Vérifie que le secret est défini
-        run: test -n "$MONGODB_URI" || { echo "Secret MONGODB_URI_PROD manquant (environnement production)"; exit 1; }
-      # prisma db push refuse un changement de schéma qui perdrait des données.
-      - run: pnpm db:indexes
-      # Remplace les comptes de la maquette (@detox.test) et de démo (@seed.detox.local) ;
-      # les comptes des vrais utilisateurs ne sont pas touchés.
-      - run: pnpm db:seed
-      - run: pnpm db:smoke
