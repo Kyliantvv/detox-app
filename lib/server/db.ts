@@ -80,6 +80,7 @@ type Db = {
   events: Map<string, PointEvent[]>;
   media: Map<string, DbMedia>;
   instants: Map<string, DbInstant>;
+  profileViews: Map<string, Map<string, number>>; // visiteur → profil visité → nombre de visites
 };
 
 export const SEED_PASSWORD = "demo1234";
@@ -126,6 +127,7 @@ function seed(): Db {
     events: new Map(),
     media: new Map(),
     instants: new Map(),
+    profileViews: new Map(),
   };
 
   for (const friend of FRIENDS) {
