@@ -1,10 +1,10 @@
 import { CHEST_EVERY_PAGES, POINTS } from "@/lib/game";
-import { flowPage } from "@/lib/server/seed";
 import type { PointEvent } from "@/lib/types";
 import { requireUser } from "@/lib/server/auth";
-import { accountOf, findPost } from "@/lib/server/db";
+import { accountOf } from "@/lib/server/db";
 import { ApiError, json, route } from "@/lib/server/http";
 import { credit, withPoints } from "@/lib/server/points";
+import { flowRecommendations } from "@/lib/server/recommend";
 import { postView } from "@/lib/server/views";
 
 const MAX_PAGE = 10_000;
@@ -25,6 +25,7 @@ export const GET = route((request) => {
     if (account.flowPagesRead.length % CHEST_EVERY_PAGES === 0) gains.push(credit(user.id, POINTS.chest, "Coffre ouvert"));
     if (Math.random() < 0.15) gains.push(credit(user.id, 10 + Math.floor(Math.random() * 15) * 10, "Bonus aléatoire"));
   }
-  const items = flowPage(page).map((post) => postView(findPost(post.id)!, user.id));
+  // Posts choisis par l'algorithme de recommandation (lib/server/recommend.ts), avec leur raison.
+  const items = flowRecommendations(user.id, page).map(({ post, reason }) => ({ ...postView(post, user.id), reason }));
   return json({ items, page, nextPage: page < MAX_PAGE ? page + 1 : null, serenity: account.serenity, ...withPoints(user.id, gains) });
 });

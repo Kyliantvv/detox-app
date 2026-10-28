@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CHEST_EVERY_PAGES, POINTS } from "@/lib/game";
 import { accountOf, db, followingOf } from "@/lib/server/db";
+import { FLOW_POOL } from "@/lib/server/recommend";
 import { apiError, call } from "@/test/api";
 import * as circle from "./circle/route";
 import * as flow from "./flow/route";
@@ -32,13 +33,18 @@ describe("GET /api/feed/flow", () => {
   const noBonus = () => vi.spyOn(Math, "random").mockReturnValue(0.99);
   const read = (page: string) => call(flow.GET, { as: "alex", query: { page } });
 
-  it("renvoie 5 posts déterministes et crédite la page", async () => {
+  // Le choix des posts est testé dans lib/server/recommend.test.ts.
+  it("renvoie 5 posts recommandés de la réserve de la page et crédite la page", async () => {
     noBonus();
 
     const res = await read("0");
 
     expect(res.status).toBe(200);
-    expect(ids(res.body.items)).toEqual(["f0", "f1", "f2", "f3", "f4"]);
+    expect(res.body.items).toHaveLength(5);
+    for (const item of res.body.items) {
+      expect(Number(item.id.slice(1))).toBeLessThan(FLOW_POOL);
+      expect(item.reason).toEqual(expect.any(String));
+    }
     expect(res.body).toMatchObject({ page: 0, nextPage: 1, serenity: 97, points: 2455 + POINTS.flowPage });
     expect(res.body.gains).toEqual([expect.objectContaining({ amount: POINTS.flowPage, label: "Page 1 du Flow" })]);
   });

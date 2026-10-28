@@ -141,6 +141,8 @@ export type PostView = Post & {
   dosedByMe: boolean;
   savedByMe: boolean;
   videoUrl?: string;
+  // Flow et Reels : pourquoi l'algorithme de recommandation a choisi ce post.
+  reason?: string;
 };
 
 export type ExploreTile = { id: string; art: ArtVariant; tags: string[] };

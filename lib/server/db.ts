@@ -81,6 +81,7 @@ type Db = {
   media: Map<string, DbMedia>;
   instants: Map<string, DbInstant>;
   profileViews: Map<string, Map<string, number>>; // visiteur → profil visité → nombre de visites
+  flowPages: Map<string, Map<number, { id: string; reason: string }[]>>; // userId → page du Flow → posts recommandés
 };
 
 export const SEED_PASSWORD = "demo1234";
@@ -128,6 +129,7 @@ function seed(): Db {
     media: new Map(),
     instants: new Map(),
     profileViews: new Map(),
+    flowPages: new Map(),
   };
 
   for (const friend of FRIENDS) {
