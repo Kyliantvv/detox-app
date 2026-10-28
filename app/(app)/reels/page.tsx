@@ -11,7 +11,7 @@ import type { PostView } from "@/lib/types";
 // Reels plein écran, un par un (scroll vertical aimanté). Vidéos lues en boucle, sans son.
 export default function ReelsPage() {
   const { data: me } = useMe();
-  const { data } = useApiData<{ items: PostView[] }>("/api/posts?type=reel");
+  const { data } = useApiData<{ items: PostView[] }>("/api/feed/reels");
 
   return (
     <div className="fixed inset-x-0 top-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 mx-auto max-w-[480px] bg-ink">
@@ -48,6 +48,7 @@ function Reel({ reel }: { reel: PostView }) {
               {username}
             </Link>
             <p className="mt-2 text-[15px]">{reel.caption}</p>
+            {reel.reason && <p className="mt-1 text-xs text-lime">{reel.reason}</p>}
           </div>
           <div className="flex flex-col items-center gap-4 text-xs font-semibold">
             <button

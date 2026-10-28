@@ -106,6 +106,7 @@ export default function PostCard({ post }: { post: PostView }) {
           <p className="text-[13px] text-muted">
             {post.location} · {post.ago}
           </p>
+          {post.reason && <p className="text-xs text-lime">{post.reason}</p>}
         </div>
         <button type="button" aria-label="Plus d'options" className="p-1 text-fg">
           <MoreIcon />
