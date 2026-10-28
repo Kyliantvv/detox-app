@@ -1,26 +1,126 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Thème sombre néon des maquettes Détox. */
+@theme {
+  --color-ink: #0b0b12;
+  --color-panel: #171726;
+  --color-panel-2: #11111c;
+  --color-line: #2a2a44;
+  --color-fg: #f5f5fa;
+  --color-muted: #9a9ab0;
+  --color-pink: #ff2e88;
+  --color-sun: #ffd60a;
+  --color-lime: #22ff88;
+  --color-night: #22073f;
+  --color-dusk: #2e2c48;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --animate-float-up: float-up 1.4s ease-out forwards;
+  --animate-pop: pop 220ms ease-out;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  @keyframes float-up {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, 8px) scale(0.9);
+    }
+    15% {
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
+    }
+    80% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -28px);
+    }
+  }
+
+  @keyframes pop {
+    0% {
+      transform: scale(0.6);
+    }
+    70% {
+      transform: scale(1.15);
+    }
+    100% {
+      transform: scale(1);
+    }
   }
 }
 
+@theme inline {
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
+  --font-pixel: var(--font-press-start);
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-ink);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-ink);
+  color: var(--color-fg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-lime);
+  outline-offset: 2px;
+}
+
+/* Classes réutilisables (déclarées en @utility pour pouvoir se composer entre elles). */
+@utility card {
+  @apply rounded-2xl border border-line bg-panel;
+}
+
+@utility btn {
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 font-semibold transition-transform active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-sun {
+  @apply btn bg-sun text-ink;
+}
+
+@utility btn-pink {
+  @apply btn bg-pink text-ink;
+}
+
+@utility btn-lime {
+  @apply btn bg-lime text-ink;
+}
+
+@utility btn-ghost {
+  @apply btn border border-line bg-panel-2 text-fg;
+}
+
+@utility pill {
+  @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-panel-2 px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap;
+}
+
+@utility input {
+  @apply min-h-12 w-full rounded-xl border border-line bg-panel-2 px-4 text-fg placeholder:text-muted focus:border-lime focus:outline-none;
+}
+
+@utility scratch {
+  background: repeating-linear-gradient(135deg, #2e2c48 0 10px, #3a3858 10px 20px);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }

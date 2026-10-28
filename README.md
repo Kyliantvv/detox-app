@@ -80,9 +80,31 @@ Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadT
   | `UNAUTHORIZED` | 401 |
   | `NOT_FOUND` | 404 |
   | `EMAIL_ALREADY_USED` | 409 |
+  | `USERNAME_ALREADY_USED` | 409 |
+  | `INSUFFICIENT_POINTS` | 409 |
+  | `TARGET_SHIELDED` | 409 |
 
 - Identifiant public `id` (jamais `_id`) ; `ownerId` déduit du JWT ; listes en `{"items":[...]}`.
 - `PATCH` partiel, champs inconnus refusés ; id mal formé → 400.
+- Les actions qui rapportent des points renvoient aussi `points` (nouveau solde) et `gains` (`PointEvent[]`).
+
+### Implémentation actuelle (Route Handlers Next.js)
+
+En attendant le back Express, l'API tourne dans `app/api/**/route.ts` au-dessus d'une base mockée en mémoire (`lib/server/db.ts`, seedée depuis `lib/server/seed.ts`, remise à zéro à chaque redémarrage). Le front ne contient plus aucune donnée : tout passe par l'API (`lib/api-client.ts`, cache SWR).
+
+**Authentification** : NextAuth v5 (`auth.ts`), provider Credentials branché sur la base mockée, session JWT dans un cookie httpOnly chiffré. La session porte aussi le JWT de l'API (`accessToken`), que le front envoie en `Authorization: Bearer`. `proxy.ts` renvoie toute page vers `/connexion` sans session, et `/connexion` vers `/` avec une session. Les médias (`/api/media/:id`) exigent la session ou le Bearer.
+
+Variables (voir `.env.example`, à copier en `.env.local`) : `JWT_SECRET` et `AUTH_SECRET` (obligatoires en production), `AUTH_TRUST_HOST=true` hors Vercel. Comptes seedés : `alex@detox.test` (démo), `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`.
+
+| Domaine | Routes (toutes sous `/api`, Bearer requis sauf `health`, `auth/*`, `shop`) |
+|---|---|
+| Comptes | `POST auth/register`, `POST auth/login`, `POST auth/demo`, `GET/PATCH me` |
+| Fil | `GET feed/circle`, `GET feed/flow?page=N`, `GET stories` |
+| Posts | `GET posts?author=&type=reel\|post&saved=1&explore=1`, `POST posts` (multipart `media` + `caption`), `GET media/:id`, `POST/DELETE posts/:id/likes`, `GET/POST posts/:id/comments`, `POST/DELETE posts/:id/saves` |
+| Comptes suivis | `GET users?q=`, `GET users/:username`, `GET/POST follows`, `DELETE follows/:targetId` |
+| L'Épicerie | `GET shop`, `GET/POST orders`, `POST dice`, `GET ticket`, `POST ticket/scratch` (cases non grattées jamais envoyées) |
+| Clairvoyance | `GET skills?targetId=`, `POST skills/:skillId` |
+| Messages | `GET conversations`, `GET/POST conversations/:id/messages` (en polling) |
 
 ## Base de données
 
