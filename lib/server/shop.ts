@@ -1,7 +1,17 @@
 // L'Épicerie et la Clairvoyance côté serveur : débits, tirages, commandes fictives.
 import { LOOT_PRIZES, drawTicketCells, fakeTracking, ticketWinnings } from "../game";
 import { FAKE_ADDRESSES, INTEL, SHOP_ITEMS } from "./seed";
-import type { IntelKey, Order, PointEvent, Purchase, ShopItemId, SkillId, Ticket, TicketView } from "../types";
+import type {
+  IntelKey,
+  Order,
+  PointEvent,
+  Purchase,
+  ShopItemId,
+  SkillId,
+  Ticket,
+  TicketView,
+  TrackingStep,
+} from "../types";
 import { accountOf, db, eventsOf, followingOf, formatAgo, uid } from "./db";
 import { ApiError } from "./http";
 import { credit, debit } from "./points";
@@ -35,9 +45,12 @@ function drawTicket(userId: string): Ticket {
   return ticket;
 }
 
+// Libellé de débit de tout achat à L'Épicerie : « Derniers achats » s'en sert pour retrouver tickets et loot box.
+const PURCHASE_LABEL = "Achat : ";
+
 export function buy(userId: string, itemId: string): { purchase: Purchase; gains: PointEvent[] } {
   const item = findShopItem(itemId);
-  debit(userId, item.price, `Achat : ${item.name}`);
+  debit(userId, item.price, `${PURCHASE_LABEL}${item.name}`);
   if (item.kind === "ticket") {
     return { purchase: { kind: "ticket", ticket: ticketView(drawTicket(userId)) }, gains: [] };
   }
@@ -49,6 +62,28 @@ export function buy(userId: string, itemId: string): { purchase: Purchase; gains
     return { purchase: { kind: "lootbox", prize: prize.label }, gains };
   }
   return { purchase: { kind: "order", order: createOrder(userId, item.id) }, gains: [] };
+}
+
+// Seules les commandes du compte connecté sont cherchées : celle d'un autre compte répond 404, comme une absente.
+export function findOrder(userId: string, orderId: string): Order {
+  const order = db().orders.get(userId)?.find((candidate) => candidate.id === orderId);
+  if (!order) throw new ApiError("NOT_FOUND", "Commande introuvable.");
+  return order;
+}
+
+// Faux suivi : les étapes se valident avec le temps écoulé depuis l'achat, sauf la livraison, jamais atteinte.
+export const TRACKING_STEPS = [
+  { label: "Commande validée", afterMs: 0 },
+  { label: "Colis préparé", afterMs: 2 * 60_000 },
+  { label: "Remis au transporteur", afterMs: 10 * 60_000 },
+  { label: "En transit", afterMs: 30 * 60_000 },
+];
+
+export function trackingSteps(order: Order, now = Date.now()): TrackingStep[] {
+  return [
+    ...TRACKING_STEPS.map(({ label, afterMs }) => ({ label, at: order.at + afterMs, done: now >= order.at + afterMs })),
+    { label: "Livré", at: null, done: false },
+  ];
 }
 
 // Les cases non grattées ne quittent jamais le serveur.
@@ -79,11 +114,31 @@ export function scratch(userId: string, index: number): { ticket: TicketView; ga
 
 // ---------- Clairvoyance ----------
 
+// Appelée à chaque ouverture d'un profil (GET /api/users/[username]) ; regarder son propre profil ne compte pas.
+export function recordProfileView(viewerId: string, profileId: string) {
+  if (viewerId === profileId) return;
+  const views = db().profileViews;
+  const counts = views.get(viewerId) ?? new Map<string, number>();
+  counts.set(profileId, (counts.get(profileId) ?? 0) + 1);
+  views.set(viewerId, counts);
+}
+
+// Compétence « Visites de profil » : le profil que la cible est allée voir le plus souvent.
+function mostVisited(targetId: string): string {
+  const [profileId, count] = [...(db().profileViews.get(targetId) ?? [])].sort((a, b) => b[1] - a[1])[0] ?? [];
+  const profile = profileId ? db().users.get(profileId) : undefined;
+  if (!profile || !count) return "N'a visité personne";
+  return `A visité ${profile.name} ${count} fois`;
+}
+
 // Comptes seedés : fiches de la maquette. Vrais comptes : métadonnées calculées, jamais de contenu.
 function intelFor(targetId: string): Record<IntelKey, string> {
   if (INTEL[targetId]) return INTEL[targetId];
   const account = accountOf(targetId);
-  const orders = db().orders.get(targetId) ?? [];
+  // Tous les achats (commandes, tickets, loot box) laissent un débit « Achat : … », du plus récent au plus ancien.
+  const purchases = eventsOf(targetId)
+    .filter((event) => event.label.startsWith(PURCHASE_LABEL))
+    .map((event) => event.label.slice(PURCHASE_LABEL.length));
   const hours = new Map<number, number>();
   eventsOf(targetId).forEach((event) => {
     const hour = new Date(event.at).getHours();
@@ -96,8 +151,8 @@ function intelFor(targetId: string): Record<IntelKey, string> {
     solde: account.points.toLocaleString("fr-FR"),
     serie: `${account.streak} jour${account.streak > 1 ? "s" : ""}`,
     "temps-scroll": `${account.flowPagesRead.length} pages`,
-    "derniers-achats": orders.length ? orders.slice(0, 3).map((order) => order.itemName).join(", ") : "Aucun",
-    "visites-profil": "N'a visité personne",
+    "derniers-achats": purchases.length ? purchases.slice(0, 3).join(", ") : "Aucun",
+    "visites-profil": mostVisited(targetId),
     "plus-gros-gain": `+${account.bestGain.toLocaleString("fr-FR")}`,
     "heures-pointe": peak === undefined ? "Pas encore assez de données" : `${peak} h – ${(peak + 1) % 24} h`,
     "cercle-proche": `${circle} compte${circle > 1 ? "s" : ""}`,

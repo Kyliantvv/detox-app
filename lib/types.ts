@@ -72,6 +72,11 @@ export type Order = {
   at: number;
 };
 
+// Étape du faux suivi de colis : `at` à null pour la livraison, qui n'arrive jamais.
+export type TrackingStep = { label: string; at: number | null; done: boolean };
+
+export type OrderDetail = Order & { steps: TrackingStep[] };
+
 export type PointEvent = {
   id: string;
   amount: number;
