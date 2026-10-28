@@ -1,4 +1,4 @@
-import type { AvatarColor, PostType, Prisma, Visibility } from "@prisma/client";
+import type { Art, AvatarColor, PostType, Prisma, Visibility } from "@prisma/client";
 import { parisDay } from "../lib/db/time";
 
 // Fausses données pour `pnpm db:seed`. Pur et déterministe : une même graine
@@ -9,8 +9,9 @@ export const SEED_EMAIL_DOMAIN = "seed.detox.local";
 
 /** Mot de passe de tous les comptes de seed. */
 export const SEED_PASSWORD = "detox1234";
-// bcrypt (coût 10) de SEED_PASSWORD, calculé une fois : l'auth prévue utilise bcrypt.
-const SEED_PASSWORD_HASH = "$2b$10$zDgTsHS1wi0YmFSzx1wks.MVgzF/k.yj3NEycJ2wbao9DTgTQSUwm";
+// scrypt de SEED_PASSWORD, calculé une fois au format de lib/server/password.ts.
+const SEED_PASSWORD_HASH =
+  "aea951add24a16e2b17677d85139711a:6ad8d06611f6879dae0d8d1f8bbfa8fee0592a327c4f5897a34ae7d737b5f774";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -25,20 +26,21 @@ const LAST_NAMES = [
   "Morel", "Girard", "André", "Mercier", "Dupont", "Lambert", "Bonnet", "François", "Martinez", "Faure",
 ];
 const BIOS = [
-  "", "Je scrolle donc je suis.", "Accro au café et aux stories.", "Étudiant·e, fatigué·e.",
-  "Ici pour les points.", "Détox ? Demain.", "Photos de chats et de couchers de soleil.",
-  "Série en cours : ne pas casser.", "Je like tout, désolé·e.", "Lyon ↔ Paris",
+  "", "Curieux·se de tout.", "Fan de café et de stories.", "Étudiant·e.",
+  "Ici pour les points.", "Toujours partant·e.", "Photos de chats et de couchers de soleil.",
+  "Série en cours : ne pas casser.", "Je like tout, avec plaisir.", "Lyon ↔ Paris",
 ];
 const CAPTIONS = [
   "Encore un dimanche au soleil ☀️", "Vue imprenable ce matin", "Le meilleur brunch de la ville",
   "Petit tour en montagne", "Ça, c'est fait.", "Je ne m'en lasse pas", "Nouvelle coupe, qu'en dites-vous ?",
   "Throwback à cet été", "Séance de sport du jour 💪", "Coucher de soleil sans filtre",
   "Ma playlist du moment tourne en boucle", "Premier essai, soyez indulgents", "On refait le monde en terrasse",
-  "Week-end loin des écrans (ou presque)", "Quelqu'un reconnaît l'endroit ?", "",
+  "Week-end au calme", "Quelqu'un reconnaît l'endroit ?", "",
 ];
 const TAGS = ["voyage", "food", "sport", "mode", "nature", "art", "musique", "chill", "ville", "animaux"];
 const LOCATIONS = ["Paris", "Lyon", "Marseille", "Bordeaux", "Lille", "Nantes", "Toulouse", "Nice", "Annecy", "Biarritz"];
 const AVATAR_COLORS: AvatarColor[] = ["pink", "yellow", "green", "purple", "grey"];
+const ARTS: Art[] = ["sunset", "moon", "triangle", "diamond", "pill", "ring", "square", "dome", "dot", "waves"];
 
 /** Générateur pseudo-aléatoire déterministe (mulberry32). */
 export function createRng(seed: number) {
@@ -124,13 +126,14 @@ export function fakePosts(count: number, authorIds: string[], rng: Rng, now = ne
       location: rng.chance(0.5) ? rng.pick(LOCATIONS) : undefined,
       tags,
       visibility,
+      art: rng.pick(ARTS),
       createdAt,
     };
   });
 }
 
 /** Chaque utilisateur suit entre 0 et 2 × `perUser` autres comptes. */
-export function fakeFollows(users: FakeUser[], perUser: number, rng: Rng, now = new Date()): Prisma.FollowCreateManyInput[] {
+function fakeFollows(users: FakeUser[], perUser: number, rng: Rng, now = new Date()): Prisma.FollowCreateManyInput[] {
   const byId = new Map(users.map((u) => [u.id, u]));
   const ids = [...byId.keys()];
   return users.flatMap((follower) =>
@@ -142,7 +145,7 @@ export function fakeFollows(users: FakeUser[], perUser: number, rng: Rng, now = 
 }
 
 /** Chaque post reçoit entre 0 et 2 × `perPost` likes, jamais de son auteur. */
-export function fakeLikes(posts: FakePost[], userIds: string[], perPost: number, rng: Rng, now = new Date()): WithId<Prisma.LikeCreateManyInput>[] {
+function fakeLikes(posts: FakePost[], userIds: string[], perPost: number, rng: Rng, now = new Date()): WithId<Prisma.LikeCreateManyInput>[] {
   return posts.flatMap((post) =>
     sample(userIds, rng.int(2 * perPost + 1), rng, post.authorId).map((userId) => {
       const createdAt = between(post.createdAt, now, rng);
@@ -151,17 +154,18 @@ export function fakeLikes(posts: FakePost[], userIds: string[], perPost: number,
   );
 }
 
-export const POINTS = { daily_login: 25, flow_page: 10, like: 2 } as const;
+const POINTS = { daily_login: 25, flow_page: 10, like: 2 } as const;
+const LABELS = { daily_login: "Connexion du jour", flow_page: "Page du Flow", like: "Bonne dose donnée" } as const;
 
 /**
  * Historique de points d'un utilisateur, de son inscription à `now` : une
  * connexion quotidienne un jour sur deux environ, 0 à 5 pages de Flow ces
  * jours-là, et une Bonne dose par like donné. Son solde en est la somme.
  */
-export function fakePointEvents(user: FakeUser, likesGiven: WithId<Prisma.LikeCreateManyInput>[], rng: Rng, now = new Date()) {
+function fakePointEvents(user: FakeUser, likesGiven: WithId<Prisma.LikeCreateManyInput>[], rng: Rng, now = new Date()) {
   const events: Prisma.PointEventCreateManyInput[] = [];
   const add = (type: keyof typeof POINTS, createdAt: Date, extra: { flowPage?: number; refId?: string } = {}) =>
-    events.push({ userId: user.id, type, amount: POINTS[type], day: parisDay(createdAt), createdAt, ...extra });
+    events.push({ userId: user.id, type, amount: POINTS[type], label: LABELS[type], day: parisDay(createdAt), createdAt, ...extra });
 
   const days = new Set<string>();
   let flowPage = 0;

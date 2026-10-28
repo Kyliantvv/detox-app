@@ -1,8 +1,9 @@
 // Ticket à gratter : achat (POST /api/dice), lecture et grattage case par case.
 import { describe, expect, it } from "vitest";
-import { TICKET_PRICE } from "@/lib/game";
-import { accountOf, db } from "@/lib/server/db";
+import { TICKET_PRICE, ticketWinnings } from "@/lib/game";
+import { db } from "@/lib/db";
 import { apiError, call } from "@/test/api";
+import { USERS } from "@/test/db";
 import * as dice from "../dice/route";
 import * as scratch from "./scratch/route";
 import { GET } from "./route";
@@ -10,7 +11,15 @@ import { GET } from "./route";
 const HIDDEN = [null, null, null, null, null, null];
 
 // Ticket choisi par le test plutôt que tiré au sort.
-const giveTicket = (cells: number[]) => db().tickets.set("alex", { cells, revealed: cells.map(() => false), paidOut: false });
+const giveTicket = (cells: number[]) =>
+  db.draw.create({
+    data: {
+      userId: USERS.alex,
+      kind: "scratch",
+      cells: cells.map((value) => ({ value, revealed: false })),
+      payout: ticketWinnings({ cells }),
+    },
+  });
 const scratchCell = (index: unknown) => call(scratch.POST, { as: "alex", body: { index } });
 
 describe("POST /api/dice", () => {
@@ -24,11 +33,11 @@ describe("POST /api/dice", () => {
       points: 2455 - TICKET_PRICE,
       gains: [],
     });
-    expect(db().tickets.get("alex")?.cells).toHaveLength(6);
+    expect((await db.draw.findFirstOrThrow({ where: { userId: USERS.alex } })).cells).toHaveLength(6);
   });
 
   it("remplace le ticket en cours", async () => {
-    giveTicket([500, 500, 500, 0, 0, 0]);
+    await giveTicket([500, 500, 500, 0, 0, 0]);
 
     await call(dice.POST, { as: "alex", method: "POST" });
 
@@ -36,12 +45,12 @@ describe("POST /api/dice", () => {
   });
 
   it("refuse l'achat sans assez de points", async () => {
-    accountOf("alex").points = TICKET_PRICE - 1;
+    await db.user.update({ where: { id: USERS.alex }, data: { points: TICKET_PRICE - 1 } });
 
     const res = await call(dice.POST, { as: "alex", method: "POST" });
 
     expect(res.status).toBe(409);
-    expect(db().tickets.has("alex")).toBe(false);
+    expect(await db.draw.count()).toBe(0);
   });
 });
 
@@ -54,7 +63,7 @@ describe("GET /api/ticket", () => {
   });
 
   it("ne révèle que les cases grattées", async () => {
-    giveTicket([1000, 0, 50, 100, 200, 500]);
+    await giveTicket([1000, 0, 50, 100, 200, 500]);
     await scratchCell(0);
 
     const res = await call(GET, { as: "alex" });
@@ -65,7 +74,7 @@ describe("GET /api/ticket", () => {
 
 describe("POST /api/ticket/scratch", () => {
   it("paie un ticket gagnant une seule fois, à la dernière case", async () => {
-    giveTicket([500, 0, 500, 50, 500, 100]);
+    await giveTicket([500, 0, 500, 50, 500, 100]);
     for (const index of [0, 1, 2, 3, 4]) expect((await scratchCell(index)).body.gains).toEqual([]);
 
     const last = await scratchCell(5);
@@ -78,7 +87,7 @@ describe("POST /api/ticket/scratch", () => {
   });
 
   it("garde la meilleure combinaison quand deux valeurs sortent trois fois", async () => {
-    giveTicket([50, 1000, 50, 1000, 50, 1000]);
+    await giveTicket([50, 1000, 50, 1000, 50, 1000]);
 
     for (const index of [0, 1, 2, 3, 4]) await scratchCell(index);
     const res = await scratchCell(5);
@@ -87,7 +96,7 @@ describe("POST /api/ticket/scratch", () => {
   });
 
   it("ne paie rien sans trois valeurs identiques", async () => {
-    giveTicket([500, 500, 0, 0, 50, 100]);
+    await giveTicket([500, 500, 0, 0, 50, 100]);
 
     for (const index of [0, 1, 2, 3, 4]) await scratchCell(index);
     const res = await scratchCell(5);
@@ -101,7 +110,7 @@ describe("POST /api/ticket/scratch", () => {
     [1.5, "index doit être un entier entre 0 et 5."],
     ["1", "Champ « index » : number attendu."],
   ])("refuse index=%j", async (index, message) => {
-    giveTicket([0, 0, 0, 0, 0, 0]);
+    await giveTicket([0, 0, 0, 0, 0, 0]);
 
     const res = await scratchCell(index);
 

@@ -30,12 +30,12 @@ export const openApiSpec = {
     title: "Détox API",
     version: "1.0.0",
     description:
-      "Parodie de réseau social, projet scolaire : tout est fictif, aucun achat réel. Les montants de points sont toujours calculés par le serveur.",
+      "API de Détox, le réseau social qui récompense chaque geste. Les montants de points sont toujours calculés par le serveur.",
   },
   servers: [{ url: "/" }],
   security: [{ bearerAuth: [] }],
   tags: [
-    { name: "L'Épicerie", description: "Catalogue, achats et fausses commandes" },
+    { name: "L'Épicerie", description: "Catalogue, achats et commandes" },
     { name: "Tirages", description: "Ticket à gratter : le serveur tire les cases, le client ne fait que gratter" },
     { name: "Clairvoyance", description: "Compétences d'espionnage d'un ami ; la cible n'est jamais notifiée" },
   ],
@@ -60,7 +60,7 @@ export const openApiSpec = {
       post: {
         tags: ["L'Épicerie"],
         summary: "Acheter un article",
-        description: "Débite le prix, puis crée une fausse commande, un ticket à gratter ou ouvre une loot box selon l'article.",
+        description: "Débite le prix, puis crée une commande, un ticket à gratter ou ouvre une loot box selon l'article.",
         requestBody: {
           required: true,
           ...jsonBody({
@@ -82,8 +82,8 @@ export const openApiSpec = {
     "/api/orders/{id}": {
       get: {
         tags: ["L'Épicerie"],
-        summary: "Détail d'une commande et son faux suivi",
-        description: "Les étapes se valident avec le temps écoulé depuis l'achat ; la livraison n'arrive jamais. La commande d'un autre compte répond 404.",
+        summary: "Détail d'une commande et son suivi",
+        description: "Les étapes se valident avec le temps écoulé depuis l'achat . La commande d'un autre compte répond 404.",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         responses: {
           200: ok("La commande", { type: "object", properties: { order: ref("OrderDetail") } }),
@@ -222,7 +222,7 @@ export const openApiSpec = {
           itemName: { type: "string" },
           price: { type: "integer" },
           tracking: { type: "string", example: "DTX-123456-FR" },
-          address: { type: "string", description: "Adresse fictive" },
+          address: { type: "string", description: "Adresse de livraison" },
           at: { type: "integer", description: "Date d'achat, en millisecondes" },
         },
       },
@@ -230,7 +230,7 @@ export const openApiSpec = {
         type: "object",
         properties: {
           label: { type: "string" },
-          at: { type: ["integer", "null"], description: "null pour la livraison, qui n'arrive jamais" },
+          at: { type: ["integer", "null"], description: "null tant que la livraison n'a pas de date" },
           done: { type: "boolean" },
         },
       },

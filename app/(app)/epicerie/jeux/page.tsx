@@ -147,7 +147,7 @@ export default function GamesPage() {
         Loot box · 600 pts
       </Link>
       <p className="text-center text-xs text-muted">
-        Jeu fictif, points virtuels uniquement ({points} pts en poche). Joue avec modération.
+        Points Détox uniquement ({points} pts en poche). Joue avec modération.
       </p>
     </>
   );

@@ -1,4 +1,5 @@
 import type { User } from "@prisma/client";
+import { levelFor } from "../game";
 
 // Données privées : jamais dans le JSON public, puisque Clairvoyance vend
 // le solde, la série et la dernière connexion. Le JSON public garde le niveau
@@ -7,12 +8,10 @@ import type { User } from "@prisma/client";
 /** « En ligne » : une activité il y a moins de 2 minutes. */
 export const ONLINE_WINDOW_MS = 2 * 60 * 1000;
 
-/** Utilisateur tel que le renvoie `db` : sans `passwordHash`, sauf `omit: { passwordHash: false }`. */
-type UserRow = Omit<User, "passwordHash"> & { passwordHash?: string };
+export { levelFor };
 
-export function levelFor(totalEarned: number) {
-  return Math.floor(Math.sqrt(totalEarned / 30));
-}
+/** Utilisateur tel que le renvoie `db` : sans `passwordHash`, sauf `omit: { passwordHash: false }`. */
+export type UserRow = Omit<User, "passwordHash"> & { passwordHash?: string };
 
 export function isOnline(lastActiveAt: Date | null | undefined, now = Date.now()) {
   return !!lastActiveAt && now - lastActiveAt.getTime() < ONLINE_WINDOW_MS;

@@ -91,7 +91,7 @@ describe.skipIf(!uri)("lib/db sur MongoDB", () => {
 
   it("achète une compétence au prix de SKILLS, une seule fois", async () => {
     const [buyer, target] = [await newUser(500), await newUser()];
-    const purchase = await lib.buySkill(buyer.id, target.id, "balance");
+    const { purchase } = await lib.buySkill(buyer.id, target.id, "balance");
     expect(purchase.price).toBe(lib.SKILLS.balance);
     const dup = await lib.buySkill(buyer.id, target.id, "balance").catch((e: unknown) => e);
     expect(lib.isDuplicateKey(dup)).toBe(true);
@@ -138,11 +138,11 @@ describe.skipIf(!uri)("lib/db sur MongoDB", () => {
     expect(after.lastActiveAt).toEqual(new Date(t0.getTime() + 30_000));
 
     expect(await lib.bumpCombo(user.id, t0)).toBe(1);
-    expect(await lib.bumpCombo(user.id, new Date(t0.getTime() + 5_000))).toBe(2);
+    expect(await lib.bumpCombo(user.id, new Date(t0.getTime() + 3_000))).toBe(2);
     expect(await lib.bumpCombo(user.id, new Date(t0.getTime() + 60_000))).toBe(1);
 
     await lib.recordPostsSeen(user.id, 30, t0);
-    expect(await lib.recordPostsSeen(user.id, 30, t0)).toEqual({ total: 60, today: 60, untilChest: 40 });
+    expect(await lib.recordPostsSeen(user.id, 30, t0)).toEqual({ total: 60, today: 60, untilChest: 20 });
     await expect(lib.recordActivity("0".repeat(24))).rejects.toBeInstanceOf(lib.NotFoundError);
   });
 

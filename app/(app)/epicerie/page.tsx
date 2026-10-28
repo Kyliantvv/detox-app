@@ -81,7 +81,6 @@ export default function GroceryPage() {
               <div className="min-w-0 flex-1">
                 <p className="font-display text-[17px] font-bold">{item.name}</p>
                 <p className="text-sm text-muted">{item.description}</p>
-                <p className="mt-0.5 text-xs text-muted/70 italic">simulation scolaire</p>
               </div>
               <button
                 type="button"
@@ -122,7 +121,7 @@ export default function GroceryPage() {
               <dd className="font-semibold text-sun">Ton colis est en route</dd>
             </dl>
             <p className="rounded-xl border border-line bg-panel-2 p-3 text-sm text-muted">
-              Il n&apos;arrivera jamais. C&apos;est une simulation scolaire : rien n&apos;est livré.
+              Suis l&apos;avancement de ta livraison dans Mes commandes.
             </p>
             <button type="button" className="btn-sun" onClick={close}>
               Continuer mes achats

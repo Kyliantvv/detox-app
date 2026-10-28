@@ -1,105 +1,122 @@
 import { describe, expect, it } from "vitest";
+import { db, parisDay } from "@/lib/db";
 import { COMBO_WINDOW_MS, POINTS } from "../game";
 import { advanceTime, freezeTime } from "@/test/api";
-import { accountOf, eventsOf, today } from "./db";
+import { USERS, userRow } from "@/test/db";
 import { ApiError } from "./http";
 import { credit, debit, startSession, withPoints } from "./points";
 
-// Compte vierge : accountOf() le crée au premier accès.
-const USER = "nouveau";
+// Compte vierge, sans points ni série.
+const fresh = async () =>
+  (await db.user.create({ data: { email: "nouveau@example.com", username: "nouveau", passwordHash: "x" } })).id;
+const events = (userId: string) => db.pointEvent.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
 
 describe("credit", () => {
-  it("met à jour le solde, les totaux et le meilleur gain", () => {
-    credit(USER, 40, "Test");
-    credit(USER, 10, "Test");
+  it("met à jour le solde et le cumul, et journalise le gain", async () => {
+    const user = await fresh();
+    await credit(user, 40, "bonus", "Test");
+    await credit(user, 10, "bonus", "Test");
 
-    expect(accountOf(USER)).toMatchObject({ points: 50, totalEarned: 50, earnedToday: 50, bestGain: 40 });
-    expect(eventsOf(USER).map((event) => event.amount)).toEqual([10, 40]);
+    expect(await userRow(user)).toMatchObject({ points: 50, totalEarned: 50 });
+    expect((await events(user)).map((event) => event.amount).sort()).toEqual([10, 40]);
   });
 
-  it("ne garde que les 200 derniers événements", () => {
-    for (let i = 0; i < 205; i++) credit(USER, 1, `Gain ${i}`);
+  it("renvoie le gain au format de l'API", async () => {
+    const user = await fresh();
 
-    expect(eventsOf(USER)).toHaveLength(200);
-    expect(eventsOf(USER)[0].label).toBe("Gain 204");
+    const [gain] = await credit(user, 5, "bonus", "Test");
+
+    expect(gain).toEqual({ id: expect.any(String), amount: 5, label: "Test", at: expect.any(Number) });
   });
 
-  it("multiplie les actions enchaînées dans la fenêtre du combo", () => {
+  it("multiplie les actions enchaînées dans la fenêtre du combo", async () => {
     freezeTime();
-    const amounts = Array.from({ length: 10 }, () => credit(USER, 10, "Like", { combo: true }).amount);
+    const user = await fresh();
+    const amounts = [];
+    for (let i = 0; i < 10; i++) amounts.push((await credit(user, 10, "like", "Like", { combo: true }))[0].amount);
 
     expect(amounts).toEqual([10, 10, 10, 10, 15, 15, 15, 15, 15, 20]);
   });
 
-  it("remet le combo à zéro après une pause", () => {
+  it("remet le combo à zéro après une pause", async () => {
     freezeTime();
-    for (let i = 0; i < 4; i++) credit(USER, 10, "Like", { combo: true });
+    const user = await fresh();
+    for (let i = 0; i < 4; i++) await credit(user, 10, "like", "Like", { combo: true });
 
     advanceTime(COMBO_WINDOW_MS);
-    const event = credit(USER, 10, "Like", { combo: true });
+    const [event] = await credit(user, 10, "like", "Like", { combo: true });
 
     expect(event).toMatchObject({ amount: 10, label: "Like" });
   });
 });
 
 describe("debit", () => {
-  it("débite et compte la dépense", () => {
-    credit(USER, 100, "Test");
+  it("débite sans toucher au cumul des gains", async () => {
+    const user = await fresh();
+    await credit(user, 100, "bonus", "Test");
 
-    const event = debit(USER, 30, "Achat");
+    const event = await debit(user, 30, "shop_purchase", "Achat");
 
     expect(event.amount).toBe(-30);
-    expect(accountOf(USER)).toMatchObject({ points: 70, totalSpent: 30, totalEarned: 100 });
+    expect(await userRow(user)).toMatchObject({ points: 70, totalEarned: 100 });
   });
 
-  it("refuse un débit supérieur au solde sans rien modifier", () => {
-    credit(USER, 20, "Test");
+  it("refuse un débit supérieur au solde sans rien modifier", async () => {
+    const user = await fresh();
+    await credit(user, 20, "bonus", "Test");
 
-    expect(() => debit(USER, 50, "Achat")).toThrow(new ApiError("INSUFFICIENT_POINTS", "Il te manque 30 pts. Retourne scroller."));
-    expect(accountOf(USER)).toMatchObject({ points: 20, totalSpent: 0 });
-    expect(eventsOf(USER)).toHaveLength(1);
+    await expect(debit(user, 50, "shop_purchase", "Achat")).rejects.toThrow(
+      new ApiError("INSUFFICIENT_POINTS", "Il te manque 30 pts. Retourne scroller."),
+    );
+    expect((await userRow(user)).points).toBe(20);
+    expect(await events(user)).toHaveLength(1);
   });
 
-  it("autorise un débit égal au solde", () => {
-    credit(USER, 50, "Test");
+  it("autorise un débit égal au solde", async () => {
+    const user = await fresh();
+    await credit(user, 50, "bonus", "Test");
 
-    debit(USER, 50, "Achat");
+    await debit(user, 50, "shop_purchase", "Achat");
 
-    expect(accountOf(USER).points).toBe(0);
+    expect((await userRow(user)).points).toBe(0);
   });
 });
 
 describe("startSession", () => {
-  it("offre la bienvenue et la connexion du jour au premier passage", () => {
-    const gains = startSession(USER, true);
+  it("offre la bienvenue et la connexion du jour au premier passage", async () => {
+    const user = await fresh();
+
+    const gains = await startSession(user, true);
 
     expect(gains.map((gain) => gain.amount)).toEqual([POINTS.welcome, POINTS.dailyLogin]);
-    expect(accountOf(USER)).toMatchObject({ streak: 1, lastLoginDay: today() });
+    expect((await userRow(user)).streak).toEqual({ current: 1, best: 1, lastLoginDay: parisDay() });
   });
 
-  it("prolonge la série d'un jour à l'autre et remet à zéro les gains du jour", () => {
+  it("prolonge la série d'un jour à l'autre", async () => {
     freezeTime();
-    startSession(USER, true);
+    const user = await fresh();
+    await startSession(user, true);
 
     advanceTime(86_400_000);
-    const gains = startSession(USER, false);
+    const gains = await startSession(user, false);
 
     expect(gains).toHaveLength(1);
-    expect(accountOf(USER)).toMatchObject({ streak: 2, earnedToday: POINTS.dailyLogin });
+    expect((await userRow(user)).streak?.current).toBe(2);
   });
 
-  it("ne crédite rien de plus le même jour", () => {
-    startSession(USER, true);
+  it("ne crédite rien de plus le même jour", async () => {
+    const user = await fresh();
+    await startSession(user, true);
 
-    expect(startSession(USER, false)).toEqual([]);
-    expect(accountOf(USER).streak).toBe(1);
+    expect(await startSession(user, false)).toEqual([]);
+    expect((await userRow(user)).streak?.current).toBe(1);
   });
 });
 
 describe("withPoints", () => {
-  it("joint le solde actuel aux gains", () => {
-    const gains = [credit(USER, 5, "Test")];
+  it("joint le solde actuel aux gains", async () => {
+    const gains = await credit(USERS.alex, 5, "bonus", "Test");
 
-    expect(withPoints(USER, gains)).toEqual({ points: 5, gains });
+    expect(await withPoints(USERS.alex, gains)).toEqual({ points: 2460, gains });
   });
 });

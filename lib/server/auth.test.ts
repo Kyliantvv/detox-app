@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { advanceTime, freezeTime } from "@/test/api";
-import { accountOf } from "./db";
-import { requireUser, signToken, verifyToken } from "./auth";
-import { ApiError } from "./http";
+import { signToken, verifyToken } from "./auth";
 
 const decode = (part: string) => JSON.parse(Buffer.from(part, "base64url").toString());
-const bearer = (token: string) => new Request("http://localhost/", { headers: { authorization: `Bearer ${token}` } });
 
 describe("signToken / verifyToken", () => {
   it("signe un JWT HS256 valable 7 jours", () => {
@@ -54,25 +51,5 @@ describe("signToken / verifyToken", () => {
     vi.stubEnv("JWT_SECRET", "");
 
     expect(() => signToken("alex")).toThrow("JWT_SECRET manquant.");
-  });
-});
-
-describe("requireUser", () => {
-  it("renvoie l'utilisateur du Bearer et note son passage", () => {
-    freezeTime();
-    advanceTime(1000);
-
-    const user = requireUser(bearer(signToken("lina")));
-
-    expect(user.username).toBe("lina.m");
-    expect(accountOf("lina").lastSeenAt).toBe(Date.now());
-  });
-
-  it.each([
-    ["sans en-tête", new Request("http://localhost/")],
-    ["avec un token invalide", bearer("x.y.z")],
-    ["pour un compte supprimé", bearer(signToken("fantome"))],
-  ])("lève UNAUTHORIZED %s", (_, request) => {
-    expect(() => requireUser(request)).toThrow(new ApiError("UNAUTHORIZED", "Token manquant ou invalide."));
   });
 });

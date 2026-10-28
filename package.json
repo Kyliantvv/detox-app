@@ -1,5 +1,5 @@
 {
-  "name": "my-app",
+  "name": "detox",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,7 +13,9 @@
     "prepare": "husky",
     "postinstall": "prisma generate",
     "db:seed": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed.mts",
-    "db:indexes": "prisma db push --skip-generate && tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/indexes.mts"
+    "db:indexes": "prisma db push --skip-generate && tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/indexes.mts",
+    "db:smoke": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/smoke.mts",
+    "db:ping": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/ping.mts"
   },
   "engines": {
     "node": ">=22.9"

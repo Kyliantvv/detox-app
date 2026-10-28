@@ -14,7 +14,7 @@ export function PointsPill({ value }: { value: number }) {
   );
 }
 
-export function StreakPill({ days }: { days: number }) {
+function StreakPill({ days }: { days: number }) {
   return (
     <span className="pill text-sun" aria-label={`Série de ${days} jours`}>
       <FlameIcon size={14} /> {days} j

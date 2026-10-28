@@ -2,8 +2,9 @@ name: CI
 
 on:
   pull_request:
+    branches: [dev, main]
   push:
-    branches: [main]
+    branches: [dev, main]
 
 jobs:
   check:
@@ -18,12 +19,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      # Pas de TEST_MONGODB_URI ici : lib/db/db.test.ts est sauté, il tourne dans le job db.
       - run: pnpm test
       - run: pnpm build
 
-  # Smoke test sur une vraie MongoDB (le replica set de compose.yaml) : schéma,
-  # index, seed lancé deux fois, puis les tests d'intégration de lib/db.
   db:
     runs-on: ubuntu-latest
     env:
@@ -37,17 +35,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: docker compose up -d --wait mongo
-      # prisma db push, puis les index hors schéma ; échoue s'il en manque un.
       - run: pnpm db:indexes
-      # La seconde passe doit remplacer les comptes de seed, pas les doubler.
       - name: pnpm db:seed (deux passes)
         run: |
           pnpm db:seed --users 20 --posts 50
           pnpm db:seed --users 20 --posts 50
           docker compose exec -T mongo mongosh --quiet detox_smoke --eval '
             const count = (name, filter = {}) => db.getCollection(name).countDocuments(filter);
+            // 50 posts aléatoires et 48 de la maquette (comptes @detox.test).
             const got = {
               users: count("users", { email: /@seed\.detox\.local$/ }),
+              scenarioUsers: count("users", { email: /@detox\.test$/ }),
               posts: count("posts"),
               shopItems: count("shop_items"),
               follows: count("follows"),
@@ -55,11 +53,12 @@ jobs:
               pointEvents: count("point_events"),
             };
             printjson(got);
-            const ok = got.users === 20 && got.posts === 50 && got.shopItems === 4
+            const ok = got.users === 20 && got.scenarioUsers === 6 && got.posts === 98 && got.shopItems === 4
               && got.follows > 0 && got.likes > 0 && got.pointEvents > 0;
             if (!ok) quit(1);
           '
-      - run: pnpm exec vitest run lib/db
+      - run: pnpm db:smoke
+      - run: pnpm test
         env:
           TEST_MONGODB_URI: mongodb://localhost:27017/detox_test?directConnection=true
       - if: failure()

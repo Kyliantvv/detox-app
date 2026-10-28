@@ -1,8 +1,9 @@
 // Parcours complet d'un nouveau compte, route après route, comme le ferait le front.
 import { expect, it, vi } from "vitest";
 import { POINTS } from "@/lib/game";
-import { db } from "@/lib/server/db";
+import { db } from "@/lib/db";
 import { call, freezeTime } from "@/test/api";
+import { POSTS, USERS } from "@/test/db";
 import * as register from "./auth/register/route";
 import * as dice from "./dice/route";
 import * as flow from "./feed/flow/route";
@@ -31,7 +32,7 @@ it("inscription → Flow → Bonne dose → ticket → Clairvoyance, avec un sol
   expect(points).toBe(525 + 4 * POINTS.flowPage + POINTS.chest);
 
   // 5e action enchaînée : la dose passe en combo ×1,5.
-  const like = await call(likes.POST, { token, params: { id: "f2" } });
+  const like = await call(likes.POST, { token, params: { id: POSTS.f2 } });
   expect(like.body.gains).toEqual([expect.objectContaining({ amount: 3, label: "Bonne dose donnée · combo ×1.5" })]);
   expect(like.body.points).toBe(points + 3);
   points = like.body.points;
@@ -40,11 +41,14 @@ it("inscription → Flow → Bonne dose → ticket → Clairvoyance, avec un sol
   expect(ticket.body.points).toBe(points - 300);
   points = ticket.body.points;
   // Ticket gagnant posé à la main, le tirage étant aléatoire.
-  db().tickets.set(session.user.id, { cells: [200, 200, 200, 0, 50, 100], revealed: Array(6).fill(false), paidOut: false });
+  await db.draw.updateMany({
+    where: { userId: session.user.id, kind: "scratch" },
+    data: { cells: [200, 200, 200, 0, 50, 100].map((value) => ({ value, revealed: false })), payout: 200 },
+  });
   for (let index = 0; index < 6; index++) points = (await call(scratch.POST, { token, body: { index } })).body.points;
   expect(points).toBe(525 + 40 + 50 + 3 - 300 + 200);
 
-  const spy = await call(skill.POST, { token, params: { skillId: "serie" }, body: { targetId: "karim" } });
+  const spy = await call(skill.POST, { token, params: { skillId: "serie" }, body: { targetId: USERS.karim } });
   expect(spy.body).toMatchObject({ intel: { serie: "14 jours" }, points: points - 150 });
   points = spy.body.points;
 

@@ -12,7 +12,7 @@ export default function ShopLayout({ children }: LayoutProps<"/epicerie">) {
       </Suspense>
       {children}
       <p className="text-center text-xs text-muted">
-        Simulation scolaire. Objets virtuels uniquement, aucun achat réel, rien n&apos;est livré.
+        Paiement en points Détox uniquement. Aucun achat en argent réel.
       </p>
     </>
   );

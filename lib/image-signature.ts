@@ -25,7 +25,7 @@ const HEAD_SIZE = 12;
  * stream that still yields the whole body. The type declared at presign is
  * only the client's word; this checks what is actually stored.
  */
-export const checkImageSignature = async (
+const checkImageSignature = async (
   body: Body,
   contentType: string | undefined,
 ): Promise<ReadableStream<Uint8Array>> => {

@@ -6,7 +6,7 @@ import type { OrderDetail } from "@/lib/types";
 
 const time = (at: number) => new Date(at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
 
-// Faux suivi : GET /api/orders/[id] calcule les étapes ; on revérifie chaque minute pour les voir avancer.
+// Suivi : GET /api/orders/[id] calcule les étapes ; on revérifie chaque minute pour les voir avancer.
 export default function OrderTracking({ id }: { id: string }) {
   const { data, error } = useApiData<{ order: OrderDetail }>(`/api/orders/${encodeURIComponent(id)}`, {
     refreshInterval: 60_000,
@@ -52,7 +52,7 @@ export default function OrderTracking({ id }: { id: string }) {
                 <span className="sr-only">{step.done ? " : fait" : " : à venir"}</span>
               </p>
               <p className="text-xs text-muted">
-                {step.at === null ? "Jamais. C'est une simulation scolaire." : step.done ? time(step.at) : `Prévu le ${time(step.at)}`}
+                {step.at === null ? "Livraison estimée sous 3 à 5 jours" : step.done ? time(step.at) : `Prévu le ${time(step.at)}`}
               </p>
             </div>
           </li>

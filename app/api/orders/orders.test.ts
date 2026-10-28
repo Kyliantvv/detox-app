@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { FAKE_ADDRESSES } from "@/lib/server/seed";
-import { accountOf, db } from "@/lib/server/db";
+import { db } from "@/lib/db";
+import { FAKE_ADDRESSES } from "@/lib/server/content";
 import { apiError, call } from "@/test/api";
+import { USERS, userRow } from "@/test/db";
 import * as me from "../me/route";
+import * as ticket from "../ticket/route";
 import { GET, POST } from "./route";
 
 const buy = (itemId: string) => call(POST, { as: "alex", body: { itemId } });
@@ -47,14 +49,14 @@ describe("POST /api/orders", () => {
   });
 
   it("refuse l'achat sans assez de points, sans rien débiter", async () => {
-    accountOf("alex").points = 100;
+    await db.user.update({ where: { id: USERS.alex }, data: { points: 100 } });
 
     const res = await buy("sucre");
 
     expect(res.status).toBe(409);
     expect(res.body).toEqual(apiError("INSUFFICIENT_POINTS", "Il te manque 50 pts. Retourne scroller."));
-    expect(accountOf("alex").points).toBe(100);
-    expect(db().orders.get("alex")).toBeUndefined();
+    expect((await userRow("alex")).points).toBe(100);
+    expect(await db.order.count()).toBe(0);
   });
 
   it("répond 404 pour un article inconnu", async () => {
@@ -69,7 +71,7 @@ describe("POST /api/orders", () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual(apiError("INVALID_INPUT", "Champ(s) inconnu(s) : price."));
-    expect(accountOf("alex").points).toBe(2455);
+    expect((await userRow("alex")).points).toBe(2455);
   });
 
   describe("loot box", () => {
@@ -100,7 +102,17 @@ describe("POST /api/orders", () => {
       const res = await buy("lootbox");
 
       expect(res.body.prize).toBe("Un ticket à gratter");
-      expect(db().tickets.get("alex")?.paidOut).toBe(false);
+      expect((await call(ticket.GET, { as: "alex" })).body.ticket).toMatchObject({ paidOut: false });
+    });
+
+    it("garde la trace du tirage pour la Clairvoyance", async () => {
+      draw(0.95);
+
+      await buy("lootbox");
+
+      expect(await db.draw.findMany({ where: { userId: USERS.alex }, select: { kind: true, cost: true, status: true } })).toEqual([
+        { kind: "lootbox", cost: 600, status: "done" },
+      ]);
     });
 
     it("peut ne rien donner", async () => {
