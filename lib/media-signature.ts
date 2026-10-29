@@ -1,5 +1,5 @@
 import { FilesError, type Files } from "files-sdk";
-import type { ImageType } from "./image-types";
+import type { MediaType } from "./media-types";
 
 type Body = Parameters<Files["upload"]>[1];
 
@@ -7,8 +7,8 @@ const ascii = (bytes: Uint8Array, at: number, text: string) =>
   [...text].every((char, i) => bytes[at + i] === char.charCodeAt(0));
 
 // Magic bytes for each allowed type. The Record type makes adding a type to
-// IMAGE_TYPES without a signature a type error.
-const SIGNATURES: Record<ImageType, (head: Uint8Array) => boolean> = {
+// MEDIA_TYPES without a signature a type error.
+const SIGNATURES: Record<MediaType, (head: Uint8Array) => boolean> = {
   "image/avif": (b) =>
     ascii(b, 4, "ftyp") && (ascii(b, 8, "avif") || ascii(b, 8, "avis")),
   "image/gif": (b) => ascii(b, 0, "GIF87a") || ascii(b, 0, "GIF89a"),
@@ -16,6 +16,10 @@ const SIGNATURES: Record<ImageType, (head: Uint8Array) => boolean> = {
   "image/png": (b) =>
     [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((x, i) => b[i] === x),
   "image/webp": (b) => ascii(b, 0, "RIFF") && ascii(b, 8, "WEBP"),
+  // ISO base media box; the brand at offset 8 varies (isom, mp42, avc1…).
+  "video/mp4": (b) => ascii(b, 4, "ftyp"),
+  // EBML header.
+  "video/webm": (b) => [0x1a, 0x45, 0xdf, 0xa3].every((x, i) => b[i] === x),
 };
 
 const HEAD_SIZE = 12;
@@ -25,7 +29,7 @@ const HEAD_SIZE = 12;
  * stream that still yields the whole body. The type declared at presign is
  * only the client's word; this checks what is actually stored.
  */
-const checkImageSignature = async (
+const checkSignature = async (
   body: Body,
   contentType: string | undefined,
 ): Promise<ReadableStream<Uint8Array>> => {
@@ -45,12 +49,12 @@ const checkImageSignature = async (
   const head = new Uint8Array(length);
   chunks.reduce((offset, chunk) => (head.set(chunk, offset), offset + chunk.length), 0);
 
-  const matches = SIGNATURES[contentType as ImageType] as
+  const matches = SIGNATURES[contentType as MediaType] as
     | ((head: Uint8Array) => boolean)
     | undefined;
   if (!matches?.(head)) {
     await reader.cancel();
-    throw new FilesError("Invalid", "file content is not the declared image type");
+    throw new FilesError("Invalid", "file content is not the declared type");
   }
 
   return new ReadableStream({
@@ -64,8 +68,8 @@ const checkImageSignature = async (
   });
 };
 
-/** Wraps a Files instance so every upload goes through checkImageSignature. */
-export const withImageCheck = (files: Files): Files =>
+/** Wraps a Files instance so every upload goes through checkSignature. */
+export const withSignatureCheck = (files: Files): Files =>
   new Proxy(files, {
     get(target, prop) {
       if (prop === "upload") {
@@ -81,7 +85,7 @@ export const withImageCheck = (files: Files): Files =>
           }
           return target.upload(
             key,
-            await checkImageSignature(body, opts?.contentType),
+            await checkSignature(body, opts?.contentType),
             opts,
           );
         };

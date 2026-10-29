@@ -43,7 +43,7 @@ export function useDose(post: PostView) {
 
 export function PostMedia({ post, className = "h-full w-full object-cover" }: { post: PostView; className?: string }) {
   if (post.imageUrl) {
-    // eslint-disable-next-line @next/next/no-img-element -- média servi par /api/media (session requise)
+    // eslint-disable-next-line @next/next/no-img-element -- média servi par le CDN UploadThing
     return <img src={post.imageUrl} alt={post.caption} className={className} />;
   }
   if (post.videoUrl) {

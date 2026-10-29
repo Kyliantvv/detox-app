@@ -2,14 +2,13 @@ import { db, type Prisma } from "@/lib/db";
 import { POINTS } from "@/lib/game";
 import type { ArtVariant, ExploreTile } from "@/lib/types";
 import { requireUser } from "@/lib/server/auth";
-import { ApiError, json, route } from "@/lib/server/http";
+import { getFiles } from "@/lib/files";
+import { ApiError, assertId, json, readBody, route } from "@/lib/server/http";
 import { credit, withPoints } from "@/lib/server/points";
 import { visibleWhere } from "@/lib/server/posts";
 import { followingIds, postView, postViews } from "@/lib/server/views";
 import { CAPTION_MAX } from "@/lib/validation";
 
-// Un document MongoDB fait 16 Mo au plus : le média est stocké d'un bloc dans la collection media.
-const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
 const LIMIT = 60;
 const OBJECT_ID = /^[0-9a-f]{24}$/i;
 
@@ -54,21 +53,22 @@ async function exploreTiles(userId: string, visible: Prisma.PostWhereInput): Pro
  *   post:
  *     tags: [Posts]
  *     summary: Publier une photo ou un reel
- *     description: Le média (15 Mo maximum) est gardé dans MongoDB et servi par GET /api/media/{id}. Une vidéo crée un reel.
+ *     description: Le média est d'abord envoyé sur UploadThing par /api/files ; sa clé ne sert qu'à un post, de son auteur. Une vidéo crée un reel.
  *     requestBody:
  *       required: true
  *       content:
- *         multipart/form-data:
+ *         application/json:
  *           schema:
  *             type: object
- *             required: [media]
+ *             required: [mediaKey]
  *             properties:
- *               media: { type: string, format: binary, description: Image ou vidéo }
+ *               mediaKey: { type: string, description: Clé rendue par /api/files }
  *               caption: { type: string, maxLength: 300 }
  *     responses:
  *       '201': { description: Post publié, content: { application/json: { schema: { allOf: [{ type: object, properties: { post: { $ref: '#/components/schemas/PostView' } } }, { $ref: '#/components/schemas/PointsResponse' }] } } } }
  *       '400': { $ref: '#/components/responses/InvalidInput' }
  *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
  */
 // ?author=<id|username> · ?type=reel · ?saved=1 · ?explore=1 (mosaïque de la recherche)
 export const GET = route(async (request) => {
@@ -98,37 +98,24 @@ export const GET = route(async (request) => {
   return json({ items: await postViews(posts, user.id) });
 });
 
-// Publication : multipart avec « media » (image ou vidéo) et « caption ».
+// Publication : `mediaKey` (fichier envoyé par /api/files) et `caption`.
 export const POST = route(async (request) => {
   const user = await requireUser(request);
-  let form: FormData;
-  try {
-    form = await request.formData();
-  } catch {
-    throw new ApiError("INVALID_INPUT", "Corps multipart/form-data attendu.");
-  }
-  const unknown = [...form.keys()].filter((key) => key !== "media" && key !== "caption");
-  if (unknown.length) throw new ApiError("INVALID_INPUT", `Champ(s) inconnu(s) : ${unknown.join(", ")}.`);
-  const media = form.get("media");
-  const caption = form.get("caption") ?? "";
-  if (!(media instanceof File) || !/^(image|video)\//.test(media.type)) {
-    throw new ApiError("INVALID_INPUT", "Champ « media » : image ou vidéo attendue.");
-  }
-  if (media.size > MAX_MEDIA_BYTES) throw new ApiError("INVALID_INPUT", "Fichier trop lourd (15 Mo max).");
-  if (typeof caption !== "string" || caption.length > CAPTION_MAX) {
-    throw new ApiError("INVALID_INPUT", `Légende : ${CAPTION_MAX} caractères maximum.`);
-  }
+  const { mediaKey, caption = "" } = await readBody(request, { mediaKey: "string", caption: "string?" });
+  const key = assertId(mediaKey, "mediaKey");
+  if (caption.length > CAPTION_MAX) throw new ApiError("INVALID_INPUT", `Légende : ${CAPTION_MAX} caractères maximum.`);
 
+  // Réservation atomique : seul l'auteur du fichier le publie, et une seule fois.
   const now = new Date();
-  const stored = await db.media.create({
-    data: { ownerId: user.id, mime: media.type, data: new Uint8Array(await media.arrayBuffer()), createdAt: now },
-  });
+  const claimed = await db.media.updateMany({ where: { key, ownerId: user.id, usedAt: null }, data: { usedAt: now } });
+  if (!claimed.count) throw new ApiError("NOT_FOUND", "Média introuvable ou déjà publié.");
+  const media = await db.media.findUniqueOrThrow({ where: { key } });
   const post = await db.post.create({
     data: {
       authorId: user.id,
-      type: media.type.startsWith("video/") ? "reel" : "photo",
-      mediaPath: `/api/media/${stored.id}`,
-      mediaMime: media.type,
+      type: media.mime.startsWith("video/") ? "reel" : "photo",
+      mediaPath: await getFiles().url(key),
+      mediaMime: media.mime,
       location: "Ici",
       caption: caption.trim(),
       createdAt: now,
