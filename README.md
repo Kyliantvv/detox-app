@@ -63,10 +63,11 @@ La CI lance `lint`, `typecheck`, `test` et `build` sur chaque PR, et vérifie le
 
 Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadThing. Règles appliquées par le serveur :
 
-- Images uniquement : AVIF, GIF, JPEG, PNG, WebP. Le serveur vérifie le type déclaré et les premiers octets du fichier. Le SVG est refusé, car il peut contenir des scripts.
+- Connexion exigée : Bearer de l'API, comme les autres routes.
+- Images (AVIF, GIF, JPEG, PNG, WebP) ou vidéos (MP4, WebM). Le serveur vérifie le type déclaré et les premiers octets du fichier. Le SVG est refusé, car il peut contenir des scripts.
 - 4 Mo maximum par fichier (la limite de Vercel est de 4,5 Mo par requête).
 - Le serveur choisit le nom du fichier ; un client ne peut pas écraser un fichier existant.
-- Pas encore d'authentification : n'importe qui peut envoyer une image et obtenir son URL publique.
+- Pour publier, le front envoie d'abord le fichier, puis passe sa clé à `POST /api/posts`. Une clé ne sert qu'à un post, et seulement à son auteur. Le média est ensuite servi par le CDN UploadThing.
 
 ## Contrat d'API
 
@@ -92,7 +93,7 @@ Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadT
 
 L'API tourne dans `app/api/**/route.ts`, au-dessus de MongoDB via Prisma (`lib/db`, voir [docs/db/README.md](docs/db/README.md)) ; `lib/server` porte la logique métier et met les documents au format du contrat. Le front ne contient aucune donnée : tout passe par l'API (`lib/api-client.ts`, cache SWR).
 
-**Authentification** : NextAuth v5 (`auth.ts`), provider Credentials branché sur la base, session JWT dans un cookie httpOnly chiffré. La session porte aussi le JWT de l'API (`accessToken`), que le front envoie en `Authorization: Bearer`. `proxy.ts` renvoie toute page vers `/connexion` sans session, et `/connexion` vers `/` avec une session. Les médias (`/api/media/:id`) exigent la session ou le Bearer.
+**Authentification** : NextAuth v5 (`auth.ts`), provider Credentials branché sur la base, session JWT dans un cookie httpOnly chiffré. La session porte aussi le JWT de l'API (`accessToken`), que le front envoie en `Authorization: Bearer`. `proxy.ts` renvoie toute page vers `/connexion` sans session, et `/connexion` vers `/` avec une session. Les médias publiés sont servis par le CDN UploadThing.
 
 Variables (voir `.env.example`, à copier en `.env.local`) : `JWT_SECRET` et `AUTH_SECRET` (obligatoires en production), `AUTH_TRUST_HOST=true` hors Vercel. `MONGODB_URI` vise la base ; `pnpm db:seed` crée la boutique et les comptes de démonstration : `alex@detox.test`, `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`.
 
@@ -100,7 +101,7 @@ Variables (voir `.env.example`, à copier en `.env.local`) : `JWT_SECRET` et `AU
 |---|---|
 | Comptes | `POST auth/register`, `POST auth/login`, `GET/PATCH me` |
 | Fil | `GET feed/circle`, `GET feed/flow?page=N`, `GET stories` |
-| Posts | `GET posts?author=&type=reel\|post&saved=1&explore=1`, `POST posts` (multipart `media` + `caption`), `GET media/:id`, `POST/DELETE posts/:id/likes`, `GET/POST posts/:id/comments`, `POST/DELETE posts/:id/saves` |
+| Posts | `GET posts?author=&type=reel\|post&saved=1&explore=1`, `POST files` (envoi du média), `POST posts` (`mediaKey` + `caption`), `POST/DELETE posts/:id/likes`, `GET/POST posts/:id/comments`, `POST/DELETE posts/:id/saves` |
 | Comptes suivis | `GET users?q=`, `GET users/:username`, `GET/POST follows`, `DELETE follows/:targetId` |
 | L'Épicerie | `GET shop`, `GET/POST orders`, `POST dice`, `GET ticket`, `POST ticket/scratch` (cases non grattées jamais envoyées) |
 | Clairvoyance | `GET skills?targetId=`, `POST skills/:skillId` |

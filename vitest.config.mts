@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // Tests sans base de données.
-const UNIT_TESTS = ["lib/**/*.test.ts", "scripts/**/*.test.ts", "proxy.test.ts", "app/api/{openapi,files}/*.test.ts"];
+const UNIT_TESTS = ["lib/**/*.test.ts", "scripts/**/*.test.ts", "proxy.test.ts", "app/api/openapi/*.test.ts"];
 // Tests qui lisent ou écrivent la base : routes, couche serveur et lib/db. Ils tournent sur une vraie
 // MongoDB en replica set (TEST_MONGODB_URI, base *_test), et sont sautés sans elle.
 const DB_TESTS = ["app/api/**/*.test.ts", "lib/db/**/*.test.ts", "lib/server/{points,recommend,require-user}.test.ts"];
@@ -39,7 +39,7 @@ export default defineConfig({
               test: {
                 name: "db",
                 include: DB_TESTS,
-                exclude: ["app/api/{openapi,files}/*.test.ts", "**/node_modules/**"],
+                exclude: ["app/api/openapi/*.test.ts", "**/node_modules/**"],
                 globalSetup: ["./test/db-global.ts"],
                 setupFiles: ["./test/setup.ts", "./test/db-setup.ts"],
                 // Une seule base partagée, remise à zéro avant chaque test : un fichier à la fois.

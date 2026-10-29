@@ -98,8 +98,9 @@ export async function stats(user: User): Promise<Stats> {
   };
 }
 
+// Seul un média publié a une URL (UploadThing) ; les chemins fictifs du seed n'en sont pas.
 const mediaUrl = (post: Post, kind: "image" | "video") =>
-  post.mediaPath?.startsWith("/api/media/") && post.mediaMime?.startsWith(`${kind}/`) ? post.mediaPath : undefined;
+  post.mediaPath && URL.canParse(post.mediaPath) && post.mediaMime?.startsWith(`${kind}/`) ? post.mediaPath : undefined;
 
 // Plusieurs posts d'un coup : auteurs, commentaires, Bonnes doses et favoris lus en une requête chacun.
 export async function postViews(posts: Post[], viewerId: string): Promise<PostView[]> {

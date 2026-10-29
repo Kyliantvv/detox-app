@@ -8,13 +8,15 @@ import TopBar, { BackLink } from "@/components/top-bar";
 import { ApiClientError, useApi } from "@/lib/api-client";
 import { POINTS } from "@/lib/game";
 import { useApplyGains } from "@/lib/gains";
+import { MAX_UPLOAD_SIZE, MEDIA_TYPES } from "@/lib/media-types";
 import type { PointsResponse } from "@/lib/types";
 import { CAPTION_MAX } from "@/lib/validation";
 
-const MAX_SIZE_MB = 15;
-const ACCEPT = "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm";
+const MAX_SIZE_MB = MAX_UPLOAD_SIZE / (1024 * 1024);
+const ACCEPT = MEDIA_TYPES.join(",");
 
-// Publier une photo ou un reel : POST /api/posts en multipart (champs « media » et « caption »).
+// Publier une photo ou un reel : le fichier part sur UploadThing par /api/files,
+// puis POST /api/posts le publie avec sa clé et la légende.
 export default function PublishPage() {
   const router = useRouter();
   const api = useApi();
@@ -30,7 +32,7 @@ export default function PublishPage() {
     const chosen = event.target.files?.[0];
     setError("");
     if (!chosen) return;
-    if (chosen.size > MAX_SIZE_MB * 1024 * 1024) {
+    if (chosen.size > MAX_UPLOAD_SIZE) {
       setError(`Fichier trop lourd : ${MAX_SIZE_MB} Mo maximum.`);
       return;
     }
@@ -45,12 +47,10 @@ export default function PublishPage() {
       setError("Choisis d'abord une photo ou une vidéo.");
       return;
     }
-    const form = new FormData();
-    form.append("media", file);
-    form.append("caption", caption.trim());
     setSending(true);
     try {
-      const response = await api.post<PointsResponse>("/api/posts", form);
+      const mediaKey = await api.upload(file);
+      const response = await api.post<PointsResponse>("/api/posts", { mediaKey, caption: caption.trim() });
       applyGains(response);
       void mutate((key) => typeof key === "string" && (key.startsWith("/api/posts") || key === "/api/feed/circle"));
       router.push(file.type.startsWith("video/") ? "/reels" : "/");
@@ -81,7 +81,7 @@ export default function PublishPage() {
             <>
               <ImageIcon size={40} />
               <span className="font-semibold text-fg">Choisir une photo ou un reel</span>
-              <span className="text-sm">JPG, PNG, WebP, GIF, MP4 ou WebM · {MAX_SIZE_MB} Mo max</span>
+              <span className="text-sm">JPG, PNG, WebP, GIF, AVIF, MP4 ou WebM · {MAX_SIZE_MB} Mo max</span>
             </>
           )}
           <input type="file" accept={ACCEPT} onChange={pick} className="sr-only" />
