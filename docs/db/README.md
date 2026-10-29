@@ -33,7 +33,8 @@ Node 22.9 ou plus récent (`.nvmrc`) : les scripts utilisent `--env-file-if-exis
 |---|---|
 | `pnpm db:indexes` | `prisma db push` (collections et index du schéma), puis les index que Prisma ne sait pas décrire (uniques partiels, TTL, dans `lib/db/indexes.ts`). N'en supprime aucun. Code de sortie 1 si un index échoue ou manque. À relancer après chaque changement de schéma. |
 | `pnpm db:seed` | Crée ou met à jour les 4 articles de L'Épicerie, remplace les comptes de la maquette (`scripts/scenario.ts`), puis les comptes de démo aléatoires : 100 utilisateurs, 500 posts, leurs abonnements, likes et soldes par défaut. Relançable sans doublon. Crée aussi `admin@detox.app` et `user@detox.app` (mots de passe : `SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD`, sinon tirés au hasard) |
-| `pnpm db:smoke` | Vérifie en lecture seule qu'une base est prête : index requis, boutique, compte alex de la maquette, Instants en cours. Code de sortie 1 sinon. La CI le lance après le seed, sur la base de test et sur la prod. |
+| `pnpm db:smoke` | Vérifie en lecture seule qu'une base est prête : index requis, boutique, compte alex de la maquette, Instants en cours. Code de sortie 1 sinon. La CI le lance après le seed, sur une base jetable. |
+| `pnpm db:ping` | Vérifie en lecture seule que la base répond (`ping`), puis affiche le nombre de documents par collection. Code de sortie 1 si la connexion échoue. La CI le lance sur la prod après un push sur `main`. |
 
 **Maquette.** Le compte `alex@detox.test` et ses amis bots (`lina@detox.test`, `karim@detox.test`…, mot de passe `demo1234`), leurs posts (Mon cercle, Reels et 40 posts du Flow), Instants et abonnements. Ids fixes (`USERS`, `POSTS`) : les tests de routes repartent de cet état avant chaque test. Chaque lancement supprime les comptes `@detox.test` avec tout ce qui en dépend, puis les recrée.
 
@@ -56,14 +57,14 @@ Rien ne crée les index au démarrage, en dev non plus : lancer `pnpm db:indexes
 | `Block` | blocks | Blocage |
 | `Story` | stories | Instant ; supprimé par Mongo 24 h après (index TTL) |
 | `Conversation` | conversations | Deux participants, une seule conversation par paire |
-| `Message` | messages | Message, `readAt` à la lecture |
+| `Message` | messages | Message : texte (vide pour une photo seule), photos, vidéos ou message vocal joints (`media`), `readAt` à la lecture |
 | `ProfileView` | profile_views | Visite de profil (compétence Clairvoyance) |
 | `PointEvent` | point_events | Journal de chaque gain et dépense de points |
 | `ShopItem` | shop_items | Article de L'Épicerie |
 | `Order` | orders | Commande avec adresse de livraison et suivi |
 | `SkillPurchase` | skill_purchases | Compétence Clairvoyance achetée sur une cible |
 | `Draw` | draws | Ticket à gratter, loot box ou bonus (`DiceRoll` dans le dossier) ; `prizeItemId` pour l'objet d'une loot box |
-| `Media` | media | Fichier envoyé sur UploadThing par `/api/files` : clé, auteur, type, taille ; `usedAt` posé quand `POST /api/posts` le publie (une seule fois) |
+| `Media` | media | Fichier envoyé sur UploadThing par `/api/files` : clé, auteur, type, taille ; `usedAt` posé par `claimMedia` (`lib/server/media.ts`) quand `POST /api/posts` ou l'envoi d'un message le réserve (une seule fois) |
 | `FlowPage` | flow_pages | Page du Flow telle que la recommandation l'a composée, pour la relire à l'identique |
 
 Le catalogue des 10 compétences n'est pas une collection : c'est la constante `SKILLS` dans `lib/db/skills.ts`.
@@ -130,13 +131,13 @@ Si le document ne peut pas être créé (doublon, validation) ou si le solde ne 
 
 **Stories.** Créer avec `expiresAt: storyExpiry()` : Mongo la supprime 24 h après (index TTL).
 
-**Tests.** Les tests de routes (`app/api`), de `lib/server` qui lisent la base et `lib/db/db.test.ts` forment le projet Vitest `db` : ils ne tournent que si `TEST_MONGODB_URI` est défini (le job `db` de la CI le fait). La base est vidée puis remplie avec la maquette avant chaque test : son nom doit finir par `_test`. Sans la variable, `pnpm test` ne lance que les tests unitaires.
+**Tests.** Les tests de routes (`app/api`), de `lib/server` qui lisent la base et `lib/db/db.test.ts` forment le projet Vitest `db` : ils ne tournent que si `TEST_MONGODB_URI` est défini (le job `db` de la CI le fait). `test/db-global.ts` pousse le schéma et les index sur cette base une fois par lancement. La base est vidée puis remplie avec la maquette avant chaque test : son nom doit finir par `_test`. Sans la variable, `pnpm test` ne lance que les tests unitaires.
 
 ```bash
 docker compose up -d --wait
 TEST_MONGODB_URI="mongodb://localhost:27017/detox_test?directConnection=true" pnpm test
 ```
 
-**Production.** Après un push sur `main`, le job `prod` de la CI lance `pnpm db:indexes`, `pnpm db:seed` puis `pnpm db:smoke` sur la base du secret `MONGODB_URI_PROD` (environnement GitHub `production`). Les tests ne touchent jamais cette base.
+**Production.** Après un push sur `main`, le workflow `prod-smoke.yml` lance `pnpm db:ping` sur la base du secret `MONGODB_URI_PROD` (environnement GitHub `production`), puis `lint`, `typecheck`, `test` et `build`. Il ne crée ni index ni données : `pnpm db:indexes` et `pnpm db:seed` se lancent à la main. Les tests ne touchent jamais cette base.
 
 **Jours.** `parisDay()` donne la date `AAAA-MM-JJ` à l'heure de Paris, pour la série de connexions et les gains du jour.

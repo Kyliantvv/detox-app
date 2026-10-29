@@ -1,6 +1,6 @@
 # Modèle de données (MERISE)
 
-Trois niveaux, chacun coupé en deux domaines : **social** (comptes, publications, messages) et **économie** (points, boutique, Clairvoyance). Les diagrammes sont tirés de `lib/db/models/*.ts` ; si un modèle change, mettre à jour le diagramme ici.
+Trois niveaux, chacun coupé en deux domaines : **social** (comptes, publications, messages) et **économie** (points, boutique, Clairvoyance). Les diagrammes sont tirés de `prisma/schema.prisma` et des index de `lib/db/indexes.ts` ; si le schéma change, mettre à jour le diagramme ici.
 
 GitHub et la plupart des éditeurs affichent les blocs Mermaid.
 
@@ -35,15 +35,19 @@ class UTILISATEUR { ★idUtilisateur
   avatar
   couleurAvatar
   role
+  protege
+  bot
   derniereActivite
   dateInscription }
 class PUBLICATION { ★idPublication
   type
   media
   typeMime
+  visuel
   legende
   lieu
   visibilite
+  likesDeBase
   datePublication }
 class TAG { ★libelle }
 class COMMENTAIRE { ★idCommentaire
@@ -52,6 +56,8 @@ class COMMENTAIRE { ★idCommentaire
 class INSTANT { ★idInstant
   media
   typeMime
+  visuel
+  texte
   datePublication
   dateExpiration }
 class CONVERSATION { ★idConversation
@@ -62,6 +68,15 @@ class MESSAGE { ★idMessage
   dateLecture }
 class VISITE { ★idVisite
   dateVisite }
+class MEDIA { ★idMedia
+  cle
+  typeMime
+  taille
+  dateEnvoi
+  dateUtilisation }
+class PAGE_FLOW { ★idPage
+  numero
+  dateCreation }
 class PUBLIER:::assoc { <<association>> }
 class ETIQUETER:::assoc { <<association>> }
 class AIMER:::assoc { <<association>>
@@ -84,6 +99,12 @@ class VOIR:::assoc { <<association>> }
 class PARTICIPER:::assoc { <<association>> }
 class ENVOYER:::assoc { <<association>> }
 class CONTENIR:::assoc { <<association>> }
+class DEPOSER:::assoc { <<association>> }
+class ILLUSTRER:::assoc { <<association>> }
+class JOINDRE:::assoc { <<association>> }
+class CONSULTER:::assoc { <<association>> }
+class PROPOSER:::assoc { <<association>>
+  raison }
 UTILISATEUR "0,n" -- PUBLIER
 PUBLIER -- "1,1" PUBLICATION
 PUBLICATION "0,n" -- ETIQUETER
@@ -118,6 +139,16 @@ UTILISATEUR "0,n" -- ENVOYER
 ENVOYER -- "1,1" MESSAGE
 CONVERSATION "0,n" -- CONTENIR
 CONTENIR -- "1,1" MESSAGE
+UTILISATEUR "0,n" -- DEPOSER
+DEPOSER -- "1,1" MEDIA
+MEDIA "0,1" -- ILLUSTRER
+ILLUSTRER -- "0,1" PUBLICATION
+MEDIA "0,1" -- JOINDRE
+JOINDRE -- "0,n" MESSAGE
+UTILISATEUR "0,n" -- CONSULTER
+CONSULTER -- "1,1" PAGE_FLOW
+PAGE_FLOW "0,n" -- PROPOSER
+PROPOSER -- "0,n" PUBLICATION
 classDef assoc fill:#606060,stroke:#707070
 ```
 
@@ -133,6 +164,7 @@ class UTILISATEUR { ★idUtilisateur
 class EVENEMENT_POINTS { ★idEvenement
   montant
   type
+  libelle
   numeroPageFlow
   jour
   dateEvenement }
@@ -208,15 +240,19 @@ class UTILISATEUR { ★idUtilisateur
   avatar
   couleurAvatar
   role
+  protege
+  bot
   derniereActivite
   dateInscription }
 class PUBLICATION { ★idPublication
   type
   media
   typeMime
+  visuel
   legende
   lieu
   visibilite
+  likesDeBase
   datePublication
   #idAuteur }
 class TAG { ★libelle }
@@ -252,6 +288,8 @@ class VISITE { ★idVisite
 class INSTANT { ★idInstant
   media
   typeMime
+  visuel
+  texte
   datePublication
   dateExpiration
   #idAuteur }
@@ -267,6 +305,22 @@ class MESSAGE { ★idMessage
   dateLecture
   #idExpediteur
   #idConversation }
+class MEDIA { ★idMedia
+  cle
+  typeMime
+  taille
+  dateEnvoi
+  dateUtilisation
+  #idProprietaire
+  #idPublication
+  #idMessage }
+class PAGE_FLOW { ★idPage
+  numero
+  dateCreation
+  #idUtilisateur }
+class PROPOSER { ★#idPage
+  ★#idPublication
+  raison }
 PUBLICATION --> UTILISATEUR
 ETIQUETER --> PUBLICATION
 ETIQUETER --> TAG
@@ -293,6 +347,12 @@ PARTICIPER --> UTILISATEUR
 PARTICIPER --> CONVERSATION
 MESSAGE --> UTILISATEUR
 MESSAGE --> CONVERSATION
+MEDIA --> UTILISATEUR : propriétaire
+MEDIA --> PUBLICATION
+MEDIA --> MESSAGE
+PAGE_FLOW --> UTILISATEUR
+PROPOSER --> PAGE_FLOW
+PROPOSER --> PUBLICATION
 ```
 
 ### Économie
@@ -305,6 +365,7 @@ class UTILISATEUR { ★idUtilisateur
 class EVENEMENT_POINTS { ★idEvenement
   montant
   type
+  libelle
   numeroPageFlow
   jour
   dateEvenement
@@ -359,7 +420,7 @@ ACHETER --> COMPETENCE
 
 ## MPD (MongoDB)
 
-Du MLD au MPD, six relations passent dans des documents :
+Du MLD au MPD, huit relations passent dans des documents ou dans le code :
 
 | MLD | MPD | Pourquoi |
 |---|---|---|
@@ -369,6 +430,8 @@ Du MLD au MPD, six relations passent dans des documents :
 | CASE | `draws.cells[]` ◆ | Les cases n'existent qu'à travers leur ticket |
 | COMPETENCE | constante `SKILLS` | 10 lignes fixes, une collection n'apporte rien |
 | COMMANDE → ARTICLE | `orders.itemSnapshot` ◆ `{name, price}` | Garde le nom et le prix au moment de l'achat |
+| PROPOSER | `flow_pages.picks[]` ◆ `{postId, reason}` | Une page du Flow se relit d'un bloc, dans l'ordre, pour rester identique |
+| MEDIA → PUBLICATION, MESSAGE | URL du CDN copiée dans `posts.mediaPath` et `messages.media[]` ◆ `{url, mime}` | L'affichage ne lit pas `media` ; `media.usedAt` marque le fichier comme réservé, une seule fois |
 
 Valeurs dérivées stockées (▲) :
 
@@ -393,6 +456,8 @@ class users { ★ObjectId _id
   String avatarPath
   String avatarColor
   String role
+  Boolean shielded
+  Boolean bot
   Number points ▲
   Number totalEarned ▲
   Object streak ▲
@@ -409,6 +474,7 @@ class posts { ★ObjectId _id
   String type
   String mediaPath
   String mediaMime
+  String art
   String caption
   String location
   String[] tags ◆
@@ -416,14 +482,17 @@ class posts { ★ObjectId _id
   Number likesCount ▲
   Number repostsCount ▲
   Number commentsCount ▲
+  Number baseLikes
   Date createdAt
   idx(authorId, createdAt)
+  idx(createdAt)
   idx(tags, createdAt) }
 class likes { ★ObjectId _id
   ObjectId userId
   ObjectId postId
   Date createdAt
-  unique(userId, postId) }
+  unique(userId, postId)
+  idx(postId) }
 class reposts { ★ObjectId _id
   ObjectId userId
   ObjectId postId
@@ -434,7 +503,8 @@ class saves { ★ObjectId _id
   ObjectId userId
   ObjectId postId
   Date createdAt
-  unique(userId, postId) }
+  unique(userId, postId)
+  idx(userId, createdAt) }
 class comments { ★ObjectId _id
   ObjectId postId
   ObjectId authorId
@@ -445,7 +515,8 @@ class follows { ★ObjectId _id
   ObjectId followerId
   ObjectId followingId
   Date createdAt
-  unique(followerId, followingId) }
+  unique(followerId, followingId)
+  idx(followingId) }
 class close_friends { ★ObjectId _id
   ObjectId ownerId
   ObjectId friendId
@@ -455,7 +526,8 @@ class blocks { ★ObjectId _id
   ObjectId blockerId
   ObjectId blockedId
   Date createdAt
-  unique(blockerId, blockedId) }
+  unique(blockerId, blockedId)
+  idx(blockedId) }
 class profile_views { ★ObjectId _id
   ObjectId viewerId
   ObjectId profileId
@@ -465,23 +537,43 @@ class stories { ★ObjectId _id
   ObjectId authorId
   String mediaPath
   String mediaMime
+  String art
+  String text
   ObjectId[] viewerIds ◆
   Date expiresAt
   Date createdAt
+  idx(authorId, createdAt)
   ttl(expiresAt) }
 class conversations { ★ObjectId _id
   ObjectId[2] participantIds ◆
   String pairKey
   Date lastMessageAt ▲
   String lastMessagePreview ▲
-  unique(pairKey) }
+  Date createdAt
+  unique(pairKey)
+  idx(participantIds, lastMessageAt) }
 class messages { ★ObjectId _id
   ObjectId conversationId
   ObjectId senderId
   String text
+  Object[] media ◆ url, mime
   Date readAt
   Date createdAt
   idx(conversationId, createdAt) }
+class media { ★ObjectId _id
+  String key
+  ObjectId ownerId
+  String mime
+  Number size
+  Date usedAt
+  Date createdAt
+  unique(key) }
+class flow_pages { ★ObjectId _id
+  ObjectId userId
+  Number page
+  Object[] picks ◆ postId, reason
+  Date createdAt
+  unique(userId, page) }
 posts --> users : authorId
 likes --> users : userId
 likes --> posts : postId
@@ -504,6 +596,9 @@ stories --> users : viewerIds[]
 conversations --> users : participantIds[]
 messages --> conversations : conversationId
 messages --> users : senderId
+media --> users : ownerId
+flow_pages --> users : userId
+flow_pages --> posts : picks[].postId
 ```
 
 ### Économie
@@ -517,6 +612,7 @@ class point_events { ★ObjectId _id
   ObjectId userId
   Number amount
   String type
+  String label
   Number flowPage
   ObjectId refId
   String day
@@ -577,7 +673,7 @@ point_events --> users : userId
 orders --> users : userId
 orders --> shop_items : itemId
 draws --> users : userId
-draws --> shop_items : prizeItemId
+draws --> shop_items : prizeItemId (null si l'article est supprimé)
 skill_purchases --> users : buyerId
 skill_purchases --> users : targetId
 skill_purchases ..> SKILLS : skill
