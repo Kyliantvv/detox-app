@@ -1,9 +1,9 @@
 import { FilesError, type FileInfo, type Files } from "files-sdk";
 import { createFilesRouter } from "files-sdk/api";
 import { withSignatureCheck } from "./media-signature";
-import { MAX_UPLOAD_SIZE, MEDIA_TYPES } from "./media-types";
+import { MAX_UPLOAD_SIZE, UPLOAD_TYPES } from "./media-types";
 
-const ALLOWED_TYPES = new Set<string>(MEDIA_TYPES);
+const ALLOWED_TYPES = new Set<string>(UPLOAD_TYPES);
 
 export type UploadRouterOptions = {
   /** The uploader's user id, or null when the request isn't signed in. */
@@ -47,7 +47,7 @@ export const createUploadRouter = (
         // Checks the declared type here; withSignatureCheck checks the bytes.
         const declared = (params.files ?? []) as { type?: string }[];
         if (declared.some((file) => !ALLOWED_TYPES.has(file.type ?? ""))) {
-          throw new FilesError("Invalid", "only images and videos can be uploaded");
+          throw new FilesError("Invalid", "only images, videos and audio can be uploaded");
         }
       }
       return { context: { ownerId } };

@@ -74,11 +74,14 @@ export type PointEvent = {
   at: number;
 };
 
+export type MessageMedia = { url: string; mime: string };
+
 export type ChatMessage = {
   id: string;
   from: "me" | "them";
   text: string;
-  media?: { url: string; mime: string };
+  /** Photos et vidéos, ou un message vocal (audio). */
+  media?: MessageMedia[];
   at: number;
 };
 

@@ -356,6 +356,12 @@ model Conversation {
   @@map("conversations")
 }
 
+// Pièce jointe d'un message : URL publique (CDN UploadThing) et type.
+type MessageMedia {
+  url  String
+  mime String
+}
+
 model Message {
   id             String       @id @default(auto()) @map("_id") @db.ObjectId
   conversationId String       @db.ObjectId
@@ -364,9 +370,8 @@ model Message {
   sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
   // Vide pour une photo envoyée seule.
   text           String
-  // Photo ou vidéo jointe (URL du CDN, comme Post.mediaPath).
-  mediaPath      String?
-  mediaMime      String?
+  // Photos et vidéos, ou message vocal, joints.
+  media          MessageMedia[]
   readAt         DateTime?
   createdAt      DateTime     @default(now())
 

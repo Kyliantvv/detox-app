@@ -6,3 +6,7 @@ export const BIO_MAX = 150;
 export const CAPTION_MAX = 2200;
 export const COMMENT_MAX = 500;
 export const MESSAGE_MAX = 1000;
+// Photos et vidéos jointes à un même message.
+export const MESSAGE_MEDIA_MAX = 10;
+// Durée maximale d'un message vocal, en secondes.
+export const VOICE_MAX_SECONDS = 120;

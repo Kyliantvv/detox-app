@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getFiles } from "@/lib/files";
 import { registerAccount } from "@/lib/server/accounts";
 import { AUTO_REPLIES } from "@/lib/server/content";
-import { MESSAGE_MAX } from "@/lib/validation";
+import { MESSAGE_MAX, MESSAGE_MEDIA_MAX } from "@/lib/validation";
 import { advanceTime, apiError, call, freezeTime } from "@/test/api";
 import { USERS } from "@/test/db";
 import * as thread from "./[id]/messages/route";
@@ -132,11 +132,11 @@ describe("/api/conversations/[id]/messages", () => {
     const mediaKey = await uploaded("alex");
     const url = await getFiles().url(mediaKey);
 
-    const res = await call(thread.POST, { as: "alex", params: { id: bob.id }, body: { mediaKey } });
+    const res = await call(thread.POST, { as: "alex", params: { id: bob.id }, body: { mediaKeys: [mediaKey] } });
 
     expect(res.status).toBe(201);
-    expect(res.body.message).toMatchObject({ from: "me", text: "", media: { url, mime: "image/png" } });
-    expect((await read(bob.id)).body.items.at(-1)).toMatchObject({ text: "", media: { url, mime: "image/png" } });
+    expect(res.body.message).toMatchObject({ from: "me", text: "", media: [{ url, mime: "image/png" }] });
+    expect((await read(bob.id)).body.items.at(-1)).toMatchObject({ text: "", media: [{ url, mime: "image/png" }] });
     expect((await list()).find((item) => item.id === bob.id)).toMatchObject({ preview: "📷 Photo" });
   });
 
@@ -144,22 +144,72 @@ describe("/api/conversations/[id]/messages", () => {
     const bob = (await registerAccount({ email: "bob@example.com", username: "bob", password: "secret1" })).user;
     const mediaKey = await uploaded("alex", "video/mp4");
 
-    const res = await call(thread.POST, { as: "alex", params: { id: bob.id }, body: { text: "Regarde 😂", mediaKey } });
+    const res = await call(thread.POST, { as: "alex", params: { id: bob.id }, body: { text: "Regarde 😂", mediaKeys: [mediaKey] } });
 
-    expect(res.body.message).toMatchObject({ text: "Regarde 😂", media: { mime: "video/mp4" } });
+    expect(res.body.message).toMatchObject({ text: "Regarde 😂", media: [{ mime: "video/mp4" }] });
     expect((await list()).find((item) => item.id === bob.id)).toMatchObject({ preview: "Regarde 😂" });
   });
 
   it("refuse un média d'un autre compte ou déjà envoyé", async () => {
     const theirs = await uploaded("lina");
     const mine = await uploaded("alex");
-    await call(thread.POST, { as: "alex", params: { id: karim }, body: { mediaKey: mine } });
+    await call(thread.POST, { as: "alex", params: { id: karim }, body: { mediaKeys: [mine] } });
 
     for (const mediaKey of [theirs, mine]) {
-      const res = await call(thread.POST, { as: "alex", params: { id: karim }, body: { mediaKey } });
+      const res = await call(thread.POST, { as: "alex", params: { id: karim }, body: { mediaKeys: [mediaKey] } });
       expect(res.status).toBe(404);
       expect(res.body).toEqual(apiError("NOT_FOUND", "Média introuvable ou déjà publié."));
     }
+  });
+
+  it("envoie plusieurs photos et vidéos dans l'ordre choisi", async () => {
+    const bob = (await registerAccount({ email: "bob@example.com", username: "bob", password: "secret1" })).user;
+    const photos = [await uploaded("alex"), await uploaded("alex", "image/jpeg")];
+
+    const res = await call(thread.POST, { as: "alex", params: { id: bob.id }, body: { mediaKeys: photos } });
+
+    expect(res.status).toBe(201);
+    expect(res.body.message.media).toEqual([
+      { url: await getFiles().url(photos[0]), mime: "image/png" },
+      { url: await getFiles().url(photos[1]), mime: "image/jpeg" },
+    ]);
+    expect((await list()).find((item) => item.id === bob.id)).toMatchObject({ preview: "📷 2 photos" });
+
+    const mixed = [await uploaded("alex"), await uploaded("alex", "video/mp4")];
+    await call(thread.POST, { as: "alex", params: { id: bob.id }, body: { mediaKeys: mixed } });
+    expect((await list()).find((item) => item.id === bob.id)).toMatchObject({ preview: "📷 2 médias" });
+  });
+
+  it("n'envoie rien si un des médias est refusé", async () => {
+    const mine = await uploaded("alex");
+    const theirs = await uploaded("lina");
+
+    const res = await call(thread.POST, { as: "alex", params: { id: karim }, body: { mediaKeys: [mine, theirs] } });
+
+    expect(res.status).toBe(404);
+    expect(await db.media.findUnique({ where: { key: mine } })).toMatchObject({ usedAt: null });
+  });
+
+  it("envoie un message vocal seul, montré en aperçu « Message vocal »", async () => {
+    const bob = (await registerAccount({ email: "bob@example.com", username: "bob", password: "secret1" })).user;
+    const voice = await uploaded("alex", "audio/webm");
+
+    const res = await call(thread.POST, { as: "alex", params: { id: bob.id }, body: { mediaKeys: [voice] } });
+
+    expect(res.body.message).toMatchObject({ text: "", media: [{ mime: "audio/webm" }] });
+    expect((await list()).find((item) => item.id === bob.id)).toMatchObject({ preview: "🎤 Message vocal" });
+  });
+
+  it.each([
+    ["onze médias", async () => ({ mediaKeys: Array.from({ length: MESSAGE_MEDIA_MAX + 1 }, (_, i) => `${i}.png`) }), `${MESSAGE_MEDIA_MAX} photos ou vidéos maximum par message.`],
+    ["un message vocal avec une photo", async () => ({ mediaKeys: [await uploaded("alex", "audio/ogg"), await uploaded("alex")] }), "Un message vocal part seul."],
+    ["deux fois le même média", async () => ({ mediaKeys: ["a.png", "a.png"] }), "Un même média est joint deux fois."],
+    ["des médias qui ne sont pas une liste", async () => ({ mediaKeys: "a.png" }), "Champ « mediaKeys » : liste de chaînes attendue."],
+  ])("refuse %s", async (_, body, message) => {
+    const res = await call(thread.POST, { as: "alex", params: { id: karim }, body: await body() });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(apiError("INVALID_INPUT", message));
   });
 
   it.each([

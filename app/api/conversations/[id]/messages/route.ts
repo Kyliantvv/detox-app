@@ -5,9 +5,10 @@ import { AUTO_REPLIES } from "@/lib/server/content";
 import { messagePreview, notRead, thread } from "@/lib/server/conversations";
 import { ApiError, json, readBody, route } from "@/lib/server/http";
 import { claimMedia } from "@/lib/server/media";
+import { MEDIA_TYPES } from "@/lib/media-types";
 import { publicUser } from "@/lib/server/views";
 import type { ChatMessage } from "@/lib/types";
-import { MESSAGE_MAX } from "@/lib/validation";
+import { MESSAGE_MAX, MESSAGE_MEDIA_MAX } from "@/lib/validation";
 
 type Ctx = RouteContext<"/api/conversations/[id]/messages">;
 const REPLY_DELAY_MS = 1400;
@@ -16,7 +17,7 @@ const messageView = (message: Message, userId: string): ChatMessage => ({
   id: message.id,
   from: message.senderId === userId ? "me" : "them",
   text: message.text,
-  ...(message.mediaPath && message.mediaMime ? { media: { url: message.mediaPath, mime: message.mediaMime } } : {}),
+  ...(message.media.length ? { media: message.media } : {}),
   at: message.createdAt.getTime(),
 });
 
@@ -47,7 +48,7 @@ async function resolve(request: NextRequest, ctx: Ctx) {
  *     summary: Envoyer un message
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string }, description: Id de l'autre compte }
- *     requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, description: '`text`, `mediaKey` ou les deux', properties: { text: { type: string, maxLength: 500 }, mediaKey: { type: string, description: 'Clé rendue par /api/files (photo ou vidéo)' } } } } } }
+ *     requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, description: 'Un texte, des médias ou les deux. Un message vocal part seul (avec un texte au besoin).', properties: { text: { type: string, maxLength: 1000 }, mediaKeys: { type: array, maxItems: 10, items: { type: string }, description: 'Clés rendues par /api/files : photos et vidéos, ou un seul fichier audio (message vocal)' } } } } } }
  *     responses:
  *       '201': { description: Message envoyé, content: { application/json: { schema: { type: object, properties: { message: { $ref: '#/components/schemas/ChatMessage' } } } } } }
  *       '400': { $ref: '#/components/responses/InvalidInput' }
@@ -71,22 +72,24 @@ export const GET = route(async (request, ctx: Ctx) => {
 
 export const POST = route(async (request, ctx: Ctx) => {
   const { user, other, conversation } = await resolve(request, ctx);
-  const { text = "", mediaKey } = await readBody(request, { text: "string?", mediaKey: "string?" });
+  const { text = "", mediaKeys = [] } = await readBody(request, { text: "string?", mediaKeys: "string[]?" });
   const trimmed = text.trim();
-  if (trimmed.length > MESSAGE_MAX || (!trimmed && mediaKey === undefined)) {
+  if (trimmed.length > MESSAGE_MAX || (!trimmed && !mediaKeys.length)) {
     throw new ApiError("INVALID_INPUT", `Message : 1 à ${MESSAGE_MAX} caractères.`);
   }
+  if (mediaKeys.length > MESSAGE_MEDIA_MAX) {
+    throw new ApiError("INVALID_INPUT", `${MESSAGE_MEDIA_MAX} photos ou vidéos maximum par message.`);
+  }
   const now = new Date();
-  // Photo ou vidéo envoyée par /api/files, réservée comme pour un post.
-  const media = mediaKey === undefined ? null : await claimMedia(user.id, mediaKey, now);
+  // Fichiers envoyés par /api/files, réservés comme pour un post. Un message vocal part seul.
+  const media = await claimMedia(
+    user.id,
+    mediaKeys,
+    now,
+    mediaKeys.length > 1 ? { types: MEDIA_TYPES, refused: "Un message vocal part seul." } : {},
+  );
   const message = await db.message.create({
-    data: {
-      conversationId: conversation.id,
-      senderId: user.id,
-      text: trimmed,
-      ...(media && { mediaPath: media.url, mediaMime: media.mime }),
-      createdAt: now,
-    },
+    data: { conversationId: conversation.id, senderId: user.id, text: trimmed, media, createdAt: now },
   });
   let last = { at: now, text: messagePreview(message) };
   // Les comptes `bot` répondent tout seuls, sans timer côté serveur : la réponse est datée dans le futur.
