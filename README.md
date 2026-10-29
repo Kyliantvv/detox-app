@@ -18,6 +18,42 @@ Détox réunit fil, stories, reels, messages, recherche et profil, et fait de ch
 - **Commits** : [Conventional Commits](https://www.conventionalcommits.org/fr/) (`feat:`, `fix:`, `test:`…), vérifiés par commitlint (hook `commit-msg` + CI)
 - **Lancement** : une seule app Next.js, déployée sur Vercel ; en local, voir ci-dessous
 
+### Front
+
+| Couche | Outil |
+|---|---|
+| Framework | Next.js 16.4 (App Router, Turbopack), React 19.3, TypeScript 5.9 |
+| Rendu | `cacheComponents` et `partialPrefetching` activés (`next.config.ts`) : les données d'exécution (`params`, `usePathname`) sont lues dans un `<Suspense>` |
+| Style | Tailwind CSS 4 ; couleurs du thème dans `@theme` et classes réutilisables (`btn-sun`, `card`, `pill`, `input`) en `@utility`, dans `app/globals.css` |
+| Polices | `next/font/google` : Inter (texte), Space Grotesk (titres), Press Start 2P (compteur de points) |
+| Icônes et visuels | SVG maison (`components/icons.tsx`, `components/artwork.tsx`), sans bibliothèque |
+| Appels à l'API | `lib/api-client.ts` : `fetch` avec le JWT en `Authorization: Bearer`, erreurs `{"error":{"code","message"}}` converties en `ApiClientError`, déconnexion sur 401 |
+| Cache | SWR : la clé est le chemin de l'API (`mutate("/api/me")` rafraîchit le solde partout) ; `refreshInterval` pour le polling des messages |
+| État | `useState` et SWR, sans store global ; mises à jour optimistes avec retour arrière en cas d'erreur (Bonne dose) |
+| Session | NextAuth v5 (`SessionProvider`, `useSession`) ; `proxy.ts` protège les pages, `AppShell` gère la session qui expire en cours d'usage |
+| Médias | `files-sdk/client` pour l'envoi vers UploadThing ; affichage en `<img>` et `<video autoPlay muted loop playsInline>` |
+| Accessibilité | libellés visibles sur les champs, `aria-label` sur les boutons à icône, onglets en `role="tab"`, focus visible, animations coupées avec `prefers-reduced-motion` |
+
+Organisation :
+
+```
+app/
+  (auth)/             connexion, inscription (sans barre de navigation)
+  (app)/              écrans connectés, avec AppShell et la barre du bas
+    page.tsx          accueil : Instants, coffre, Mon cercle et Flow infini
+    reels/            reels plein écran
+    messages/[id]/    conversation (polling)
+    recherche/        comptes et mosaïque d'exploration
+    p/[id]/           détail d'un post
+    u/[username]/     profil public
+    profil/           mon profil
+    publier/          envoi d'une photo ou d'un reel
+    epicerie/         objets, clairvoyance/, jeux/ (ticket à gratter), commandes/
+    bilan/            temps passé, Sérénité, points
+components/           AppShell, BottomNav, TopBar, PostCard, Instants, ProfileView, Dialog…
+lib/api-client.ts     accès à l'API depuis le front
+```
+
 **Pourquoi Vitest plutôt que Jest**
 
 - **Compatibilité ESM** : `files-sdk` (entre autres) est publié uniquement en ESM. Jest fonctionne mal avec l'ESM; Vitest fonctionne avec l'ESM nativement.
