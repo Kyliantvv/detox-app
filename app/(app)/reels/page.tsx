@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback, useState } from "react";
 import Avatar from "@/components/avatar";
+import CommentsSheet from "@/components/comments-sheet";
 import { CommentIcon, HeartIcon, SendIcon } from "@/components/icons";
 import { PostMedia, useDose } from "@/components/post-card";
 import { PointsPill } from "@/components/top-bar";
@@ -31,6 +33,10 @@ export default function ReelsPage() {
 
 function Reel({ reel }: { reel: PostView }) {
   const { dosed, doses, toggle } = useDose(reel);
+  const [commentCount, setCommentCount] = useState(reel.comments.length);
+  const [commenting, setCommenting] = useState(false);
+  // Stable : Dialog replace le focus à chaque nouvelle fonction de fermeture.
+  const closeComments = useCallback(() => setCommenting(false), []);
   const username = reel.author?.username ?? "compte supprimé";
 
   return (
@@ -61,16 +67,29 @@ function Reel({ reel }: { reel: PostView }) {
               <HeartIcon filled={dosed} size={30} className={dosed ? "animate-pop" : ""} />
               {doses.toLocaleString("fr-FR")}
             </button>
-            <span className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setCommenting(true)}
+              aria-haspopup="dialog"
+              aria-label="Commentaires"
+              className="flex flex-col items-center gap-1"
+            >
               <CommentIcon size={28} />
-              {reel.comments.length}
-            </span>
+              {commentCount}
+            </button>
             <Link href="/messages" aria-label="Envoyer" className="flex flex-col items-center gap-1">
               <SendIcon size={28} />
             </Link>
           </div>
         </div>
       </div>
+      {commenting && (
+        <CommentsSheet
+          postId={reel.id}
+          onClose={closeComments}
+          onAdded={() => setCommentCount((n) => n + 1)}
+        />
+      )}
     </section>
   );
 }
