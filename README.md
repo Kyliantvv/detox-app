@@ -100,7 +100,7 @@ La CI lance `lint`, `typecheck`, `test` et `build` sur chaque PR, et vérifie le
 Les fichiers passent par `/api/files` (`files-sdk`) et sont stockés sur UploadThing. Règles appliquées par le serveur :
 
 - Connexion exigée : Bearer de l'API, comme les autres routes.
-- Images (AVIF, GIF, JPEG, PNG, WebP) ou vidéos (MP4, WebM). Le serveur vérifie le type déclaré et les premiers octets du fichier. Le SVG est refusé, car il peut contenir des scripts.
+- Images (AVIF, GIF, JPEG, PNG, WebP), vidéos (MP4, WebM) et, pour les messages vocaux, audio (WebM, Ogg, MP4). Un post n'accepte qu'une image ou une vidéo. Le serveur vérifie le type déclaré et les premiers octets du fichier. Le SVG est refusé, car il peut contenir des scripts.
 - 4 Mo maximum par fichier (la limite de Vercel est de 4,5 Mo par requête).
 - Le serveur choisit le nom du fichier ; un client ne peut pas écraser un fichier existant.
 - Pour publier, le front envoie d'abord le fichier, puis passe sa clé à `POST /api/posts`. Une clé ne sert qu'à un post, et seulement à son auteur. Le média est ensuite servi par le CDN UploadThing.

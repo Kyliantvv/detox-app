@@ -144,6 +144,16 @@ describe("POST /api/posts", () => {
     expect(res.body).toEqual(apiError("NOT_FOUND", "Média introuvable ou déjà publié."));
   });
 
+  it("refuse un message vocal, et le fichier reste disponible", async () => {
+    const mediaKey = await uploaded("alex", "audio/webm");
+
+    const res = await call(posts.POST, { as: "alex", body: { mediaKey } });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(apiError("INVALID_INPUT", "Un post est une photo ou une vidéo."));
+    expect(await db.media.findUnique({ where: { key: mediaKey } })).toMatchObject({ usedAt: null });
+  });
+
   it("ne publie un fichier qu'une fois, même en parallèle", async () => {
     const mediaKey = await uploaded("alex");
     const before = await db.post.count();

@@ -59,7 +59,7 @@ export function assertId(id: string, label = "id"): string {
   return id;
 }
 
-type FieldType = "string" | "string?" | "number" | "number?";
+type FieldType = "string" | "string?" | "number" | "number?" | "string[]?";
 type Body<S extends Record<string, FieldType>> = {
   [K in keyof S]: S[K] extends "string"
     ? string
@@ -67,7 +67,9 @@ type Body<S extends Record<string, FieldType>> = {
       ? string | undefined
       : S[K] extends "number"
         ? number
-        : number | undefined;
+        : S[K] extends "number?"
+          ? number | undefined
+          : string[] | undefined;
 };
 
 // Lit un corps JSON, vérifie les types et refuse les champs inconnus.
@@ -88,6 +90,12 @@ export async function readBody<S extends Record<string, FieldType>>(request: Req
     const value = record[key];
     const optional = type.endsWith("?");
     if (value === undefined && optional) continue;
+    if (type === "string[]?") {
+      if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+        throw new ApiError("INVALID_INPUT", `Champ « ${key} » : liste de chaînes attendue.`);
+      }
+      continue;
+    }
     if (typeof value !== type.replace("?", "")) {
       throw new ApiError("INVALID_INPUT", `Champ « ${key} » : ${type.replace("?", "")} attendu.`);
     }

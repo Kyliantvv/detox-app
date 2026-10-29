@@ -175,7 +175,11 @@ export const openApiDefinition = {
           id: { type: "string" },
           from: { type: "string", enum: ["me", "them"] },
           text: { type: "string" },
-          media: { type: "object", description: "Photo ou vidéo jointe", properties: { url: { type: "string" }, mime: { type: "string" } } },
+          media: {
+            type: "array",
+            description: "Photos et vidéos, ou message vocal (audio/*) ; absent sans pièce jointe",
+            items: { type: "object", properties: { url: { type: "string" }, mime: { type: "string" } } },
+          },
           at: { type: "integer" },
         },
       },

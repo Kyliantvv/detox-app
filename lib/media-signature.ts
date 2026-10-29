@@ -1,14 +1,16 @@
 import { FilesError, type Files } from "files-sdk";
-import type { MediaType } from "./media-types";
+import type { UploadType } from "./media-types";
 
 type Body = Parameters<Files["upload"]>[1];
 
 const ascii = (bytes: Uint8Array, at: number, text: string) =>
   [...text].every((char, i) => bytes[at + i] === char.charCodeAt(0));
 
+const ebml = (b: Uint8Array) => [0x1a, 0x45, 0xdf, 0xa3].every((x, i) => b[i] === x);
+
 // Magic bytes for each allowed type. The Record type makes adding a type to
-// MEDIA_TYPES without a signature a type error.
-const SIGNATURES: Record<MediaType, (head: Uint8Array) => boolean> = {
+// UPLOAD_TYPES without a signature a type error.
+const SIGNATURES: Record<UploadType, (head: Uint8Array) => boolean> = {
   "image/avif": (b) =>
     ascii(b, 4, "ftyp") && (ascii(b, 8, "avif") || ascii(b, 8, "avis")),
   "image/gif": (b) => ascii(b, 0, "GIF87a") || ascii(b, 0, "GIF89a"),
@@ -19,7 +21,10 @@ const SIGNATURES: Record<MediaType, (head: Uint8Array) => boolean> = {
   // ISO base media box; the brand at offset 8 varies (isom, mp42, avc1…).
   "video/mp4": (b) => ascii(b, 4, "ftyp"),
   // EBML header.
-  "video/webm": (b) => [0x1a, 0x45, 0xdf, 0xa3].every((x, i) => b[i] === x),
+  "video/webm": ebml,
+  "audio/webm": ebml,
+  "audio/ogg": (b) => ascii(b, 0, "OggS"),
+  "audio/mp4": (b) => ascii(b, 4, "ftyp"),
 };
 
 const HEAD_SIZE = 12;
@@ -49,7 +54,7 @@ const checkSignature = async (
   const head = new Uint8Array(length);
   chunks.reduce((offset, chunk) => (head.set(chunk, offset), offset + chunk.length), 0);
 
-  const matches = SIGNATURES[contentType as MediaType] as
+  const matches = SIGNATURES[contentType as UploadType] as
     | ((head: Uint8Array) => boolean)
     | undefined;
   if (!matches?.(head)) {

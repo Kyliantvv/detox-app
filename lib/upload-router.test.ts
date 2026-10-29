@@ -166,6 +166,18 @@ describe("upload", () => {
     expect(uploads[0].file.contentType).toBe("video/mp4");
   });
 
+  it.each([
+    ["WebM", "vocal.webm", "audio/webm", [0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01, 0x42, 0xf7, 0x81]],
+    ["Ogg", "vocal.ogg", "audio/ogg", [...new TextEncoder().encode("OggS"), 0, 2, 0, 0, 0, 0, 0, 0]],
+    ["MP4", "vocal.m4a", "audio/mp4", [0, 0, 0, 0x18, ...new TextEncoder().encode("ftypM4A "), 0, 0, 0, 0]],
+  ])("accepts %s voice messages", async (_, name, type, bytes) => {
+    const { client, uploads } = setup();
+
+    await client.upload(new File([new Uint8Array(bytes)], name, { type }));
+
+    expect(uploads[0].file.contentType).toBe(type);
+  });
+
   it("refuses a presign without a Bearer", async () => {
     const { files, server } = setup();
 
@@ -208,7 +220,7 @@ describe("upload", () => {
 
     await expect(client.upload(image(16, name, type))).rejects.toMatchObject({
       code: "Invalid",
-      message: "only images and videos can be uploaded",
+      message: "only images, videos and audio can be uploaded",
     });
   });
 

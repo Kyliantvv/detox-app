@@ -30,5 +30,13 @@ export async function thread(me: Pick<User, "id">, other: Pick<User, "id" | "use
 }
 
 // Aperçu d'un message dans la liste des conversations : son texte, sinon le type du média joint.
-export const messagePreview = (message: { text: string; mediaMime?: string | null }) =>
-  message.text || (message.mediaMime?.startsWith("video/") ? "🎬 Vidéo" : "📷 Photo");
+export function messagePreview({ text, media }: { text: string; media: { mime: string }[] }) {
+  if (text || !media.length) return text;
+  if (media.length > 1) {
+    return media.every((item) => item.mime.startsWith("image/")) ? `📷 ${media.length} photos` : `📷 ${media.length} médias`;
+  }
+  const { mime } = media[0];
+  if (mime.startsWith("audio/")) return "🎤 Message vocal";
+  if (mime.startsWith("video/")) return "🎬 Vidéo";
+  return "📷 Photo";
+}

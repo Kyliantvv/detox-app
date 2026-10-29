@@ -45,7 +45,7 @@ const getHandlers = () =>
  *     description: >-
  *       `{"op":"presign","files":[{name,type,size}]}` renvoie la clé et l'URL du PUT ;
  *       `{"op":"complete","completions":[{id,key}]}` vérifie le fichier et le lie au compte.
- *       Images (AVIF, GIF, JPEG, PNG, WebP) ou vidéos (MP4, WebM), 4 Mo maximum.
+ *       Images (AVIF, GIF, JPEG, PNG, WebP), vidéos (MP4, WebM) ou audio des messages vocaux (WebM, Ogg, MP4), 4 Mo maximum.
  *       La clé obtenue se passe ensuite à POST /api/posts.
  *     responses:
  *       '200': { description: Réponse du routeur files-sdk }

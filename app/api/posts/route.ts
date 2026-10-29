@@ -1,5 +1,6 @@
 import { db, type Prisma } from "@/lib/db";
 import { POINTS } from "@/lib/game";
+import { MEDIA_TYPES } from "@/lib/media-types";
 import type { ArtVariant, ExploreTile } from "@/lib/types";
 import { requireUser } from "@/lib/server/auth";
 import { ApiError, json, readBody, route } from "@/lib/server/http";
@@ -105,7 +106,10 @@ export const POST = route(async (request) => {
   if (caption.length > CAPTION_MAX) throw new ApiError("INVALID_INPUT", `Légende : ${CAPTION_MAX} caractères maximum.`);
 
   const now = new Date();
-  const media = await claimMedia(user.id, mediaKey, now);
+  const [media] = await claimMedia(user.id, [mediaKey], now, {
+    types: MEDIA_TYPES,
+    refused: "Un post est une photo ou une vidéo.",
+  });
   const post = await db.post.create({
     data: {
       authorId: user.id,

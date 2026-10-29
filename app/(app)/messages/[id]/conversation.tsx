@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import Avatar from "@/components/avatar";
-import { ChevronLeftIcon, CloseIcon, ImageIcon, SendIcon, SmileIcon } from "@/components/icons";
+import { ChevronLeftIcon, CloseIcon, ImageIcon, MicIcon, SendIcon, SmileIcon, TrashIcon } from "@/components/icons";
 import { PostMedia } from "@/components/post-card";
 import { ApiClientError, useApi, useApiData } from "@/lib/api-client";
 import { MAX_UPLOAD_SIZE, MEDIA_TYPES } from "@/lib/media-types";
-import type { ChatMessage, PostView, PublicUser } from "@/lib/types";
+import type { ChatMessage, MessageMedia, PostView, PublicUser } from "@/lib/types";
+import { MESSAGE_MEDIA_MAX, VOICE_MAX_SECONDS } from "@/lib/validation";
+import { formatDuration, useVoiceRecorder } from "./voice-recorder";
 
 const POLL_MS = 3000;
 const ACCEPT = MEDIA_TYPES.join(",");
@@ -65,17 +67,33 @@ function MessageText({ text }: { text: string }) {
   );
 }
 
-// Photo ou vidéo jointe à un message, servie par le CDN.
-function MessageMedia({ media }: { media: NonNullable<ChatMessage["media"]> }) {
-  const className = "block max-h-80 w-56 rounded-xl bg-ink object-cover";
+// Pièce jointe servie par le CDN UploadThing.
+function Attachment({ media, className }: { media: MessageMedia; className: string }) {
+  if (media.mime.startsWith("audio/")) {
+    return <audio src={media.url} controls preload="metadata" aria-label="Message vocal" className="block w-60 max-w-full" />;
+  }
   if (media.mime.startsWith("video/")) {
     return <video src={media.url} className={className} controls playsInline preload="metadata" />;
   }
   return (
     <a href={media.url} target="_blank" rel="noreferrer">
-      {/* eslint-disable-next-line @next/next/no-img-element -- image du CDN UploadThing, taille inconnue */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- image du CDN, taille inconnue */}
       <img src={media.url} alt="Photo envoyée" className={className} loading="lazy" />
     </a>
+  );
+}
+
+// Une pièce jointe en grand, plusieurs en grille de vignettes carrées.
+function MessageAttachments({ media }: { media: MessageMedia[] }) {
+  if (media.length === 1) {
+    return <Attachment media={media[0]} className="block max-h-80 w-56 rounded-xl bg-ink object-cover" />;
+  }
+  return (
+    <span className="grid w-56 grid-cols-2 gap-1">
+      {media.map((item) => (
+        <Attachment key={item.url} media={item} className="block aspect-square w-full rounded-lg bg-ink object-cover" />
+      ))}
+    </span>
   );
 }
 
@@ -90,7 +108,7 @@ function Bubble({ message }: { message: ChatMessage }) {
         mine ? "self-end rounded-br-md bg-pink text-ink" : "self-start rounded-bl-md border border-line bg-panel"
       }`}
     >
-      {message.media && <MessageMedia media={message.media} />}
+      {message.media && <MessageAttachments media={message.media} />}
       {message.text && (
         <span className={`block ${message.media ? "px-3 pt-1.5 pb-1" : ""}`}>
           <MessageText text={message.text} />
@@ -101,7 +119,7 @@ function Bubble({ message }: { message: ChatMessage }) {
 }
 
 // Fil de discussion lu en polling (GET toutes les 3 s), envoi par POST.
-// Une photo ou vidéo jointe part d'abord sur /api/files, puis sa clé accompagne le message.
+// Photos, vidéos et messages vocaux partent d'abord sur /api/files, puis leurs clés accompagnent le message.
 export default function Conversation({ userId }: { userId: string }) {
   const api = useApi();
   const path = `/api/conversations/${encodeURIComponent(userId)}/messages`;
@@ -110,8 +128,7 @@ export default function Conversation({ userId }: { userId: string }) {
   });
   const messages = data?.items ?? [];
   const [draft, setDraft] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<{ file: File; preview: string }[]>([]);
   const [emojis, setEmojis] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
@@ -122,26 +139,55 @@ export default function Conversation({ userId }: { userId: string }) {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
 
-  // Le panneau d'emojis et l'aperçu de la pièce jointe agrandissent la barre : on garde le dernier message visible.
+  // Le panneau d'emojis et l'aperçu des pièces jointes agrandissent la barre : on garde le dernier message visible.
   const keepBottomVisible = () => requestAnimationFrame(() => bottom.current?.scrollIntoView({ block: "end" }));
 
-  const attach = (chosen: File | null) => {
-    if (preview) URL.revokeObjectURL(preview);
-    setFile(chosen);
-    setPreview(chosen && URL.createObjectURL(chosen));
-    if (chosen) keepBottomVisible();
+  const send = async ({ text, files = [] }: { text?: string; files?: File[] }) => {
+    setSending(true);
+    setSendError("");
+    try {
+      const mediaKeys = await Promise.all(files.map((file) => api.upload(file)));
+      const { message } = await api.post<{ message: ChatMessage }>(path, {
+        ...(text ? { text } : {}),
+        ...(mediaKeys.length ? { mediaKeys } : {}),
+      });
+      await mutate((current) => current && { ...current, items: [...current.items, message] }, { revalidate: false });
+      return true;
+    } catch (err) {
+      setSendError(err instanceof ApiClientError ? err.message : "Envoi impossible.");
+      return false;
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const voice = useVoiceRecorder((file) => void send({ files: [file] }));
+
+  const detach = (index: number) => {
+    URL.revokeObjectURL(attachments[index].preview);
+    setAttachments(attachments.filter((_, i) => i !== index));
+  };
+
+  const clearAttachments = () => {
+    attachments.forEach((attachment) => URL.revokeObjectURL(attachment.preview));
+    setAttachments([]);
   };
 
   const pick = (event: ChangeEvent<HTMLInputElement>) => {
-    const chosen = event.target.files?.[0];
+    const chosen = [...(event.target.files ?? [])];
     event.target.value = "";
     setSendError("");
-    if (!chosen) return;
-    if (chosen.size > MAX_UPLOAD_SIZE) {
+    if (!chosen.length) return;
+    if (chosen.some((file) => file.size > MAX_UPLOAD_SIZE)) {
       setSendError(`Fichier trop lourd : ${MAX_SIZE_MB} Mo maximum.`);
       return;
     }
-    attach(chosen);
+    const room = MESSAGE_MEDIA_MAX - attachments.length;
+    if (chosen.length > room) setSendError(`${MESSAGE_MEDIA_MAX} photos ou vidéos maximum par message.`);
+    const added = chosen.slice(0, room).map((file) => ({ file, preview: URL.createObjectURL(file) }));
+    if (!added.length) return;
+    setAttachments([...attachments, ...added]);
+    keepBottomVisible();
   };
 
   // Insère l'emoji à la place du curseur.
@@ -156,23 +202,11 @@ export default function Conversation({ userId }: { userId: string }) {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = draft.trim();
-    if ((!text && !file) || sending) return;
-    setSending(true);
-    setSendError("");
+    if ((!text && !attachments.length) || sending) return;
     setEmojis(false);
-    try {
-      const mediaKey = file ? await api.upload(file) : undefined;
-      const { message } = await api.post<{ message: ChatMessage }>(path, {
-        ...(text ? { text } : {}),
-        ...(mediaKey ? { mediaKey } : {}),
-      });
+    if (await send({ text, files: attachments.map((attachment) => attachment.file) })) {
       setDraft("");
-      attach(null);
-      await mutate((current) => current && { ...current, items: [...current.items, message] }, { revalidate: false });
-    } catch (err) {
-      setSendError(err instanceof ApiClientError ? err.message : "Envoi impossible.");
-    } finally {
-      setSending(false);
+      clearAttachments();
     }
   };
 
@@ -188,6 +222,8 @@ export default function Conversation({ userId }: { userId: string }) {
   }
   if (!data) return <div className="h-14 animate-pulse rounded-xl bg-panel" aria-label="Chargement de la conversation" />;
   const friend = data.user;
+  const empty = !draft.trim() && !attachments.length;
+  const alert = sendError || voice.error;
 
   return (
     <>
@@ -230,72 +266,105 @@ export default function Conversation({ userId }: { userId: string }) {
             ))}
           </div>
         )}
-        {preview && file && (
-          <div className="relative mb-3 w-20">
-            {file.type.startsWith("video/") ? (
-              <video src={preview} className="aspect-square w-20 rounded-xl object-cover" muted playsInline />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element -- aperçu local (URL blob)
-              <img src={preview} alt="Pièce jointe" className="aspect-square w-20 rounded-xl object-cover" />
-            )}
-            <button
-              type="button"
-              onClick={() => attach(null)}
-              aria-label="Retirer la pièce jointe"
-              className="absolute -top-2 -right-2 rounded-full border border-line bg-panel p-1"
-            >
-              <CloseIcon size={14} />
-            </button>
-          </div>
+        {attachments.length > 0 && (
+          <ul className="mb-3 flex gap-3 overflow-x-auto pt-2 pr-2" aria-label="Pièces jointes">
+            {attachments.map(({ file, preview }, index) => (
+              <li key={preview} className="relative w-20 shrink-0">
+                {file.type.startsWith("video/") ? (
+                  <video src={preview} className="aspect-square w-20 rounded-xl object-cover" muted playsInline />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element -- aperçu local (URL blob)
+                  <img src={preview} alt={`Pièce jointe ${index + 1}`} className="aspect-square w-20 rounded-xl object-cover" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => detach(index)}
+                  aria-label={`Retirer la pièce jointe ${index + 1}`}
+                  className="absolute -top-2 -right-2 rounded-full border border-line bg-panel p-1"
+                >
+                  <CloseIcon size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
-        {sendError && (
+        {alert && (
           <p role="alert" className="mb-2 text-sm text-pink">
-            {sendError}
+            {alert}
           </p>
         )}
-        <div className="flex gap-2">
-          <label className="flex w-10 shrink-0 cursor-pointer items-center justify-center text-muted hover:text-fg">
-            <ImageIcon size={22} />
-            <span className="sr-only">Joindre une photo ou une vidéo</span>
-            <input type="file" accept={ACCEPT} onChange={pick} className="sr-only" disabled={sending} />
-          </label>
-          <label htmlFor="message" className="sr-only">
-            Ton message
-          </label>
-          <div className="relative flex-1">
-            <input
-              id="message"
-              ref={input}
-              className="input w-full pr-11"
-              placeholder="Écris un message…"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              autoComplete="off"
-            />
+        {voice.recording ? (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                if (!emojis) keepBottomVisible();
-                setEmojis(!emojis);
-              }}
-              aria-label={emojis ? "Fermer les emojis" : "Emojis"}
-              aria-expanded={emojis}
-              className={`absolute inset-y-0 right-0 flex w-11 items-center justify-center ${emojis ? "text-sun" : "text-muted hover:text-fg"}`}
+              onClick={voice.cancel}
+              aria-label="Annuler le message vocal"
+              className="flex w-10 shrink-0 items-center justify-center text-muted hover:text-fg"
             >
-              <SmileIcon size={22} />
+              <TrashIcon size={22} />
+            </button>
+            <p className="input flex flex-1 items-center gap-2" aria-live="polite">
+              <span className="size-2.5 animate-pulse rounded-full bg-pink" aria-hidden />
+              <span className="tabular-nums">{formatDuration(voice.seconds)}</span>
+              <span className="text-sm text-muted">/ {formatDuration(VOICE_MAX_SECONDS)}</span>
+              <span className="sr-only">Enregistrement en cours</span>
+            </p>
+            <button type="button" onClick={voice.stop} className="btn-sun w-12 shrink-0 px-0" aria-label="Envoyer le message vocal">
+              <SendIcon size={20} />
             </button>
           </div>
-          <button
-            type="submit"
-            className="btn-sun w-12 shrink-0 px-0"
-            aria-label="Envoyer"
-            disabled={sending || (!draft.trim() && !file)}
-          >
-            <SendIcon size={20} />
-          </button>
-        </div>
+        ) : (
+          <div className="flex gap-2">
+            <label className="flex w-10 shrink-0 cursor-pointer items-center justify-center text-muted hover:text-fg">
+              <ImageIcon size={22} />
+              <span className="sr-only">Joindre des photos ou des vidéos</span>
+              <input type="file" accept={ACCEPT} multiple onChange={pick} className="sr-only" disabled={sending} />
+            </label>
+            <label htmlFor="message" className="sr-only">
+              Ton message
+            </label>
+            <div className="relative min-w-0 flex-1">
+              <input
+                id="message"
+                ref={input}
+                className="input w-full pr-11"
+                placeholder="Écris un message…"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!emojis) keepBottomVisible();
+                  setEmojis(!emojis);
+                }}
+                aria-label={emojis ? "Fermer les emojis" : "Emojis"}
+                aria-expanded={emojis}
+                className={`absolute inset-y-0 right-0 flex w-11 items-center justify-center ${emojis ? "text-sun" : "text-muted hover:text-fg"}`}
+              >
+                <SmileIcon size={22} />
+              </button>
+            </div>
+            {empty ? (
+              <button
+                type="button"
+                onClick={() => void voice.start()}
+                className="btn-sun w-12 shrink-0 px-0"
+                aria-label="Enregistrer un message vocal"
+                disabled={sending}
+              >
+                <MicIcon size={20} />
+              </button>
+            ) : (
+              <button type="submit" className="btn-sun w-12 shrink-0 px-0" aria-label="Envoyer" disabled={sending}>
+                <SendIcon size={20} />
+              </button>
+            )}
+          </div>
+        )}
       </form>
-      <div className={emojis || preview ? "h-48" : "h-16"} />
+      <div className={emojis || attachments.length ? "h-48" : "h-16"} />
     </>
   );
 }

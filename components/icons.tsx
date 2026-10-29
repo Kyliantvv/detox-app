@@ -121,6 +121,19 @@ export const SmileIcon = (p: IconProps) => (
   </Stroke>
 );
 
+export const MicIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+  </Stroke>
+);
+
+export const TrashIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+  </Stroke>
+);
+
 export const PlusIcon = (p: IconProps) => (
   <Stroke {...p}>
     <path d="M12 5v14M5 12h14" />

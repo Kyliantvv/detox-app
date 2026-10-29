@@ -34,7 +34,7 @@ async function apiFetch<T>(path: string, token: string, init: RequestInit = {}):
 
 // Messages du routeur files-sdk (lib/upload-router.ts), en anglais, traduits pour l'interface.
 const UPLOAD_ERRORS: Record<string, string> = {
-  "only images and videos can be uploaded": "Format refusé : image ou vidéo attendue.",
+  "only images, videos and audio can be uploaded": "Format refusé : image, vidéo ou audio attendu.",
   "file content is not the declared type": "Le contenu du fichier ne correspond pas à son format.",
   "upload exceeds maxUploadSize": "Fichier trop lourd.",
 };
