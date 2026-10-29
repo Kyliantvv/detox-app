@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
+import { db } from "@/lib/db";
+import { getFiles } from "@/lib/files";
 import { registerAccount } from "@/lib/server/accounts";
 import { AUTO_REPLIES } from "@/lib/server/content";
 import { MESSAGE_MAX } from "@/lib/validation";
@@ -13,6 +16,22 @@ const list = async (as = "alex") => (await call(GET, { as })).body.items as Item
 const { alex, lina, karim, ines, noah } = USERS;
 const read = (id: string, as = "alex") => call(thread.GET, { as, params: { id } });
 const send = (id: string, text: unknown, as = "alex") => call(thread.POST, { as, params: { id }, body: { text } });
+
+// Le stockage UploadThing est remplacé par l'adaptateur mémoire de files-sdk.
+vi.mock("@/lib/files", async () => {
+  const { createFiles } = await import("files-sdk");
+  const { memory } = await import("files-sdk/memory");
+  const files = createFiles({ adapter: memory() });
+  return { getFiles: () => files };
+});
+
+// Ce que laisse un envoi par /api/files : le fichier stocké et sa ligne `media`.
+async function uploaded(who: keyof typeof USERS, mime = "image/png") {
+  const key = `${randomUUID()}.${mime.split("/")[1]}`;
+  await getFiles().upload(key, new Uint8Array(8), { contentType: mime });
+  await db.media.create({ data: { key, ownerId: USERS[who], mime, size: 8, usedAt: null } });
+  return key;
+}
 
 describe("GET /api/conversations", () => {
   it("amorce les fils des comptes seedés qui ont des messages de départ", async () => {
@@ -106,6 +125,41 @@ describe("/api/conversations/[id]/messages", () => {
     const fromAlex = (await list(bob.id)).find((item) => item.id === alex);
     expect(fromAlex).toMatchObject({ preview: "Salut Bob", unread: true });
     expect((await read(alex, bob.id)).body.items).toEqual([expect.objectContaining({ from: "them", text: "Salut Bob" })]);
+  });
+
+  it("envoie une photo seule, montrée en aperçu « Photo » dans la liste", async () => {
+    const bob = (await registerAccount({ email: "bob@example.com", username: "bob", password: "secret1" })).user;
+    const mediaKey = await uploaded("alex");
+    const url = await getFiles().url(mediaKey);
+
+    const res = await call(thread.POST, { as: "alex", params: { id: bob.id }, body: { mediaKey } });
+
+    expect(res.status).toBe(201);
+    expect(res.body.message).toMatchObject({ from: "me", text: "", media: { url, mime: "image/png" } });
+    expect((await read(bob.id)).body.items.at(-1)).toMatchObject({ text: "", media: { url, mime: "image/png" } });
+    expect((await list()).find((item) => item.id === bob.id)).toMatchObject({ preview: "📷 Photo" });
+  });
+
+  it("envoie une vidéo avec un texte, et le texte sert d'aperçu", async () => {
+    const bob = (await registerAccount({ email: "bob@example.com", username: "bob", password: "secret1" })).user;
+    const mediaKey = await uploaded("alex", "video/mp4");
+
+    const res = await call(thread.POST, { as: "alex", params: { id: bob.id }, body: { text: "Regarde 😂", mediaKey } });
+
+    expect(res.body.message).toMatchObject({ text: "Regarde 😂", media: { mime: "video/mp4" } });
+    expect((await list()).find((item) => item.id === bob.id)).toMatchObject({ preview: "Regarde 😂" });
+  });
+
+  it("refuse un média d'un autre compte ou déjà envoyé", async () => {
+    const theirs = await uploaded("lina");
+    const mine = await uploaded("alex");
+    await call(thread.POST, { as: "alex", params: { id: karim }, body: { mediaKey: mine } });
+
+    for (const mediaKey of [theirs, mine]) {
+      const res = await call(thread.POST, { as: "alex", params: { id: karim }, body: { mediaKey } });
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(apiError("NOT_FOUND", "Média introuvable ou déjà publié."));
+    }
   });
 
   it.each([

@@ -114,6 +114,13 @@ export const CloseIcon = (p: IconProps) => (
   </Stroke>
 );
 
+export const SmileIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01" />
+  </Stroke>
+);
+
 export const PlusIcon = (p: IconProps) => (
   <Stroke {...p}>
     <path d="M12 5v14M5 12h14" />

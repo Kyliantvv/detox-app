@@ -171,7 +171,13 @@ export const openApiDefinition = {
       },
       ChatMessage: {
         type: "object",
-        properties: { id: { type: "string" }, from: { type: "string", enum: ["me", "them"] }, text: { type: "string" }, at: { type: "integer" } },
+        properties: {
+          id: { type: "string" },
+          from: { type: "string", enum: ["me", "them"] },
+          text: { type: "string" },
+          media: { type: "object", description: "Photo ou vidéo jointe", properties: { url: { type: "string" }, mime: { type: "string" } } },
+          at: { type: "integer" },
+        },
       },
       ShopItem: {
         type: "object",

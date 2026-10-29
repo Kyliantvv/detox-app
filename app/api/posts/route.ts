@@ -2,8 +2,8 @@ import { db, type Prisma } from "@/lib/db";
 import { POINTS } from "@/lib/game";
 import type { ArtVariant, ExploreTile } from "@/lib/types";
 import { requireUser } from "@/lib/server/auth";
-import { getFiles } from "@/lib/files";
-import { ApiError, assertId, json, readBody, route } from "@/lib/server/http";
+import { ApiError, json, readBody, route } from "@/lib/server/http";
+import { claimMedia } from "@/lib/server/media";
 import { credit, withPoints } from "@/lib/server/points";
 import { visibleWhere } from "@/lib/server/posts";
 import { followingIds, postView, postViews } from "@/lib/server/views";
@@ -102,19 +102,15 @@ export const GET = route(async (request) => {
 export const POST = route(async (request) => {
   const user = await requireUser(request);
   const { mediaKey, caption = "" } = await readBody(request, { mediaKey: "string", caption: "string?" });
-  const key = assertId(mediaKey, "mediaKey");
   if (caption.length > CAPTION_MAX) throw new ApiError("INVALID_INPUT", `Légende : ${CAPTION_MAX} caractères maximum.`);
 
-  // Réservation atomique : seul l'auteur du fichier le publie, et une seule fois.
   const now = new Date();
-  const claimed = await db.media.updateMany({ where: { key, ownerId: user.id, usedAt: null }, data: { usedAt: now } });
-  if (!claimed.count) throw new ApiError("NOT_FOUND", "Média introuvable ou déjà publié.");
-  const media = await db.media.findUniqueOrThrow({ where: { key } });
+  const media = await claimMedia(user.id, mediaKey, now);
   const post = await db.post.create({
     data: {
       authorId: user.id,
       type: media.mime.startsWith("video/") ? "reel" : "photo",
-      mediaPath: await getFiles().url(key),
+      mediaPath: media.url,
       mediaMime: media.mime,
       location: "Ici",
       caption: caption.trim(),

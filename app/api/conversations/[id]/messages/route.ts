@@ -1,14 +1,24 @@
 import type { NextRequest } from "next/server";
-import { db, toId } from "@/lib/db";
+import { db, toId, type Message } from "@/lib/db";
 import { requireUser } from "@/lib/server/auth";
 import { AUTO_REPLIES } from "@/lib/server/content";
-import { notRead, thread } from "@/lib/server/conversations";
+import { messagePreview, notRead, thread } from "@/lib/server/conversations";
 import { ApiError, json, readBody, route } from "@/lib/server/http";
+import { claimMedia } from "@/lib/server/media";
 import { publicUser } from "@/lib/server/views";
+import type { ChatMessage } from "@/lib/types";
 import { MESSAGE_MAX } from "@/lib/validation";
 
 type Ctx = RouteContext<"/api/conversations/[id]/messages">;
 const REPLY_DELAY_MS = 1400;
+
+const messageView = (message: Message, userId: string): ChatMessage => ({
+  id: message.id,
+  from: message.senderId === userId ? "me" : "them",
+  text: message.text,
+  ...(message.mediaPath && message.mediaMime ? { media: { url: message.mediaPath, mime: message.mediaMime } } : {}),
+  at: message.createdAt.getTime(),
+});
 
 async function resolve(request: NextRequest, ctx: Ctx) {
   const user = await requireUser(request);
@@ -37,7 +47,7 @@ async function resolve(request: NextRequest, ctx: Ctx) {
  *     summary: Envoyer un message
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string }, description: Id de l'autre compte }
- *     requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [text], properties: { text: { type: string, minLength: 1, maxLength: 500 } } } } } }
+ *     requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, description: '`text`, `mediaKey` ou les deux', properties: { text: { type: string, maxLength: 500 }, mediaKey: { type: string, description: 'Clé rendue par /api/files (photo ou vidéo)' } } } } } }
  *     responses:
  *       '201': { description: Message envoyé, content: { application/json: { schema: { type: object, properties: { message: { $ref: '#/components/schemas/ChatMessage' } } } } } }
  *       '400': { $ref: '#/components/responses/InvalidInput' }
@@ -56,27 +66,29 @@ export const GET = route(async (request, ctx: Ctx) => {
     where: { AND: [{ conversationId: conversation.id, senderId: other.id, createdAt: { lte: now } }, notRead] },
     data: { readAt: now },
   });
-  const items = messages.map(({ id, senderId, text, createdAt }) => ({
-    id,
-    from: senderId === user.id ? "me" : "them",
-    text,
-    at: createdAt.getTime(),
-  }));
-  return json({ user: await publicUser(other, user.id), items });
+  return json({ user: await publicUser(other, user.id), items: messages.map((message) => messageView(message, user.id)) });
 });
 
 export const POST = route(async (request, ctx: Ctx) => {
   const { user, other, conversation } = await resolve(request, ctx);
-  const { text } = await readBody(request, { text: "string" });
+  const { text = "", mediaKey } = await readBody(request, { text: "string?", mediaKey: "string?" });
   const trimmed = text.trim();
-  if (!trimmed || trimmed.length > MESSAGE_MAX) {
+  if (trimmed.length > MESSAGE_MAX || (!trimmed && mediaKey === undefined)) {
     throw new ApiError("INVALID_INPUT", `Message : 1 à ${MESSAGE_MAX} caractères.`);
   }
   const now = new Date();
+  // Photo ou vidéo envoyée par /api/files, réservée comme pour un post.
+  const media = mediaKey === undefined ? null : await claimMedia(user.id, mediaKey, now);
   const message = await db.message.create({
-    data: { conversationId: conversation.id, senderId: user.id, text: trimmed, createdAt: now },
+    data: {
+      conversationId: conversation.id,
+      senderId: user.id,
+      text: trimmed,
+      ...(media && { mediaPath: media.url, mediaMime: media.mime }),
+      createdAt: now,
+    },
   });
-  let last = { at: now, text: trimmed };
+  let last = { at: now, text: messagePreview(message) };
   // Les comptes `bot` répondent tout seuls, sans timer côté serveur : la réponse est datée dans le futur.
   if (other.bot) {
     const reply = { at: new Date(now.getTime() + REPLY_DELAY_MS), text: AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)] };
@@ -87,5 +99,5 @@ export const POST = route(async (request, ctx: Ctx) => {
     where: { id: conversation.id },
     data: { lastMessageAt: last.at, lastMessagePreview: last.text.slice(0, 100) },
   });
-  return json({ message: { id: message.id, from: "me", text: message.text, at: now.getTime() } }, 201);
+  return json({ message: messageView(message, user.id) }, 201);
 });
