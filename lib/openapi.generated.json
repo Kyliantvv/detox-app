@@ -53,10 +53,6 @@
       "description": "Compétences d'espionnage d'un ami ; la cible n'est jamais notifiée"
     },
     {
-      "name": "Fichiers",
-      "description": "Téléversement d'images (files-sdk)"
-    },
-    {
       "name": "Système",
       "description": "Santé du service"
     }
@@ -144,6 +140,22 @@
               "example": {
                 "error": {
                   "code": "TARGET_SHIELDED",
+                  "message": "Message lisible"
+                }
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Trop de requêtes : réessayer plus tard",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error",
+              "example": {
+                "error": {
+                  "code": "RATE_LIMITED",
                   "message": "Message lisible"
                 }
               }
@@ -1233,7 +1245,7 @@
           "Posts"
         ],
         "summary": "Publier une photo ou un reel",
-        "description": "Le média (15 Mo maximum) est gardé dans MongoDB et servi par GET /api/media/{id}. Une vidéo crée un reel.",
+        "description": "Image (AVIF, GIF, JPEG, PNG, WebP) ou vidéo (MP4, WebM), 4 Mo maximum ; le type déclaré doit correspondre aux premiers octets. Le média est gardé dans MongoDB et servi par GET /api/media/{id}. Une vidéo crée un reel. 20 publications par heure maximum.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1247,7 +1259,8 @@
                   "media": {
                     "type": "string",
                     "format": "binary",
-                    "description": "Image ou vidéo"
+                    "description": "Image ou vidéo",
+                    "4 Mo maximum": null
                   },
                   "caption": {
                     "type": "string",
@@ -1286,6 +1299,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           }
         }
       }
@@ -1740,7 +1756,7 @@
           "Posts"
         ],
         "summary": "Fichier d'un post",
-        "description": "Accepte le Bearer ou le cookie de session NextAuth, parce qu'une balise `<img>` n'envoie pas de Bearer.",
+        "description": "Accepte le Bearer ou le cookie de session NextAuth, parce qu'une balise `<img>` n'envoie pas de Bearer. Répond 404 si le post du média est invisible pour ce compte (cercle proche).",
         "parameters": [
           {
             "name": "id",
@@ -2013,45 +2029,6 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
-          }
-        }
-      }
-    },
-    "/api/files": {
-      "get": {
-        "tags": [
-          "Fichiers"
-        ],
-        "summary": "URL d'un fichier téléversé",
-        "description": "Géré par files-sdk (UploadThing). Images uniquement, 4 Mo maximum. Pas encore relié aux posts.",
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Réponse du routeur files-sdk"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Fichiers"
-        ],
-        "summary": "Préparer un téléversement",
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Réponse du routeur files-sdk"
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Fichiers"
-        ],
-        "summary": "Téléverser un fichier",
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Réponse du routeur files-sdk"
           }
         }
       }

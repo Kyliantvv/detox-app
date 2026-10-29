@@ -15,7 +15,9 @@ const upload = (fields: Record<string, string | File>) => {
   for (const [name, value] of Object.entries(fields)) form.set(name, value);
   return form;
 };
-const png = () => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "photo.png", { type: "image/png" });
+const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3];
+const png = () => new File([new Uint8Array(PNG)], "photo.png", { type: "image/png" });
+const mp4 = () => new File([new Uint8Array([0, 0, 0, 0x18, ...new TextEncoder().encode("ftypisom")])], "clip.mp4", { type: "video/mp4" });
 
 describe("GET /api/posts", () => {
   it("renvoie la mosaïque d'exploration, rangée sous les filtres de la Recherche", async () => {
@@ -106,9 +108,7 @@ describe("POST /api/posts", () => {
   });
 
   it("publie une vidéo comme reel", async () => {
-    const video = new File([new Uint8Array(8)], "clip.mp4", { type: "video/mp4" });
-
-    const res = await call(posts.POST, { as: "alex", body: upload({ media: video }) });
+    const res = await call(posts.POST, { as: "alex", body: upload({ media: mp4() }) });
 
     expect(res.body.post).toMatchObject({ isReel: true, caption: "", videoUrl: expect.stringMatching(/^\/api\/media\//) });
   });
@@ -122,10 +122,13 @@ describe("POST /api/posts", () => {
   });
 
   it.each([
-    ["sans média", upload({ caption: "légende" }), "Champ « media » : image ou vidéo attendue."],
-    ["un média texte", upload({ media: new File(["hello"], "a.txt", { type: "text/plain" }) }), "Champ « media » : image ou vidéo attendue."],
-    ["un média en texte brut", upload({ media: "pas un fichier" }), "Champ « media » : image ou vidéo attendue."],
+    ["sans média", upload({ caption: "légende" }), "Champ « media » : image (AVIF, GIF, JPEG, PNG, WebP) ou vidéo (MP4, WebM) attendue."],
+    ["un média texte", upload({ media: new File(["hello"], "a.txt", { type: "text/plain" }) }), "Champ « media » : image (AVIF, GIF, JPEG, PNG, WebP) ou vidéo (MP4, WebM) attendue."],
+    ["un média en texte brut", upload({ media: "pas un fichier" }), "Champ « media » : image (AVIF, GIF, JPEG, PNG, WebP) ou vidéo (MP4, WebM) attendue."],
     ["une légende trop longue", upload({ media: png(), caption: "x".repeat(CAPTION_MAX + 1) }), `Légende : ${CAPTION_MAX} caractères maximum.`],
+    ["un SVG", upload({ media: new File(["<svg onload=alert(1)>"], "a.svg", { type: "image/svg+xml" }) }), "Champ « media » : image (AVIF, GIF, JPEG, PNG, WebP) ou vidéo (MP4, WebM) attendue."],
+    ["un fichier dont le contenu ne correspond pas au type", upload({ media: new File(["<html><script>"], "a.png", { type: "image/png" }) }), "Champ « media » : le contenu ne correspond pas au type du fichier."],
+    ["une vidéo sans en-tête MP4", upload({ media: new File([new Uint8Array(16)], "a.mp4", { type: "video/mp4" }) }), "Champ « media » : le contenu ne correspond pas au type du fichier."],
     ["un champ inconnu", upload({ media: png(), authorId: "lina" }), "Champ(s) inconnu(s) : authorId."],
     ["un corps JSON", JSON.stringify({ caption: "x" }), "Corps multipart/form-data attendu."],
   ])("refuse %s", async (_, body, message) => {
@@ -139,12 +142,32 @@ describe("POST /api/posts", () => {
     expect((await userRow("alex")).points).toBe(2455);
   });
 
-  it("refuse un fichier de plus de 15 Mo", async () => {
-    const big = new File([new Uint8Array(15 * 1024 * 1024 + 1)], "big.png", { type: "image/png" });
+  it("refuse un fichier de plus de 4 Mo sans rien enregistrer", async () => {
+    const big = new File([new Uint8Array(PNG), new Uint8Array(4 * 1024 * 1024)], "big.png", { type: "image/png" });
 
     const res = await call(posts.POST, { as: "alex", body: upload({ media: big }) });
 
-    expect(res.body).toEqual(apiError("INVALID_INPUT", "Fichier trop lourd (15 Mo max)."));
+    expect(res.body).toEqual(apiError("INVALID_INPUT", "Fichier trop lourd (4 Mo max)."));
+    expect(await db.media.count()).toBe(0);
+  });
+
+  it("refuse un corps annoncé trop lourd avant de le lire", async () => {
+    const res = await call(posts.POST, { as: "alex", body: "x", headers: { "content-length": String(10 * 1024 * 1024) } });
+
+    expect(res.body).toEqual(apiError("INVALID_INPUT", "Fichier trop lourd (4 Mo max)."));
+  });
+
+  it("limite à 20 publications par heure", async () => {
+    await db.media.createMany({
+      data: Array.from({ length: 20 }, () => ({ ownerId: USERS.alex, mime: "image/png", data: new Uint8Array(PNG), createdAt: new Date() })),
+    });
+
+    const res = await call(posts.POST, { as: "alex", body: upload({ media: png() }) });
+    const other = await call(posts.POST, { as: "lina", body: upload({ media: png() }) });
+
+    expect(res.status).toBe(429);
+    expect(res.body).toEqual(apiError("RATE_LIMITED", "20 publications par heure maximum. Réessaie plus tard."));
+    expect(other.status).toBe(201);
   });
 });
 

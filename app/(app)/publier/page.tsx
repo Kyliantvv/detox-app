@@ -8,11 +8,12 @@ import TopBar, { BackLink } from "@/components/top-bar";
 import { ApiClientError, useApi } from "@/lib/api-client";
 import { POINTS } from "@/lib/game";
 import { useApplyGains } from "@/lib/gains";
+import { MAX_UPLOAD_SIZE, MEDIA_TYPES } from "@/lib/media-types";
 import type { PointsResponse } from "@/lib/types";
 import { CAPTION_MAX } from "@/lib/validation";
 
-const MAX_SIZE_MB = 15;
-const ACCEPT = "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm";
+const MAX_SIZE_MB = MAX_UPLOAD_SIZE / 1024 / 1024;
+const ACCEPT = MEDIA_TYPES.join(",");
 
 // Publier une photo ou un reel : POST /api/posts en multipart (champs « media » et « caption »).
 export default function PublishPage() {
@@ -30,7 +31,7 @@ export default function PublishPage() {
     const chosen = event.target.files?.[0];
     setError("");
     if (!chosen) return;
-    if (chosen.size > MAX_SIZE_MB * 1024 * 1024) {
+    if (chosen.size > MAX_UPLOAD_SIZE) {
       setError(`Fichier trop lourd : ${MAX_SIZE_MB} Mo maximum.`);
       return;
     }

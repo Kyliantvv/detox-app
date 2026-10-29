@@ -13,6 +13,7 @@ const STATUS = {
   INSUFFICIENT_POINTS: 409,
   CONFLICT: 409,
   TARGET_SHIELDED: 409,
+  RATE_LIMITED: 429,
 } as const;
 
 export type ErrorCode = keyof typeof STATUS;

@@ -63,7 +63,7 @@ Rien ne crée les index au démarrage, en dev non plus : lancer `pnpm db:indexes
 | `Order` | orders | Commande avec adresse de livraison et suivi |
 | `SkillPurchase` | skill_purchases | Compétence Clairvoyance achetée sur une cible |
 | `Draw` | draws | Ticket à gratter, loot box ou bonus (`DiceRoll` dans le dossier) ; `prizeItemId` pour l'objet d'une loot box |
-| `Media` | media | Média publié avec un post, servi par `/api/media/[id]` ; 15 Mo max (un document Mongo fait 16 Mo) |
+| `Media` | media | Média publié avec un post, servi par `/api/media/[id]` ; 4 Mo max (limite de Vercel par requête) |
 | `FlowPage` | flow_pages | Page du Flow telle que la recommandation l'a composée, pour la relire à l'identique |
 
 Le catalogue des 10 compétences n'est pas une collection : c'est la constante `SKILLS` dans `lib/db/skills.ts`.

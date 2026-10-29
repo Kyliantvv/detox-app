@@ -44,7 +44,6 @@ export const openApiDefinition = {
     { name: "L'Épicerie", description: "Catalogue, achats et commandes" },
     { name: "Tirages", description: "Ticket à gratter : le serveur tire les cases, le client ne fait que gratter" },
     { name: "Clairvoyance", description: "Compétences d'espionnage d'un ami ; la cible n'est jamais notifiée" },
-    { name: "Fichiers", description: "Téléversement d'images (files-sdk)" },
     { name: "Système", description: "Santé du service" },
   ],
   components: {
@@ -57,6 +56,7 @@ export const openApiDefinition = {
       NotFound: errorResponse("Objet absent ou appartenant à un autre compte", "NOT_FOUND"),
       InsufficientPoints: errorResponse("Solde insuffisant : rien n'est débité", "INSUFFICIENT_POINTS"),
       TargetShielded: errorResponse("Cible protégée par un bouclier", "TARGET_SHIELDED"),
+      RateLimited: errorResponse("Trop de requêtes : réessayer plus tard", "RATE_LIMITED"),
     },
     schemas: {
       Error: {

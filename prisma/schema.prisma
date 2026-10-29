@@ -207,6 +207,7 @@ model Post {
   @@index([authorId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@index([tags, createdAt(sort: Desc)])
+  @@index([mediaPath])
   @@map("posts")
 }
 
@@ -482,7 +483,7 @@ model Draw {
 }
 
 // Média publié avec un post (POST /api/posts), servi par GET /api/media/[id].
-// Un document MongoDB fait 16 Mo au plus : la route limite le fichier à 15 Mo.
+// Un document MongoDB fait 16 Mo au plus ; la route limite le fichier à 4 Mo (limite de Vercel).
 model Media {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   ownerId   String   @db.ObjectId
@@ -491,6 +492,7 @@ model Media {
   data      Bytes
   createdAt DateTime @default(now())
 
+  @@index([ownerId, createdAt])
   @@map("media")
 }
 

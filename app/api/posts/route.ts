@@ -1,15 +1,17 @@
-import { db, type Prisma } from "@/lib/db";
+import { db, inTransaction, type Prisma } from "@/lib/db";
 import { POINTS } from "@/lib/game";
 import type { ArtVariant, ExploreTile } from "@/lib/types";
 import { requireUser } from "@/lib/server/auth";
 import { ApiError, json, route } from "@/lib/server/http";
+import { readMedia, readMediaForm } from "@/lib/server/media";
 import { credit, withPoints } from "@/lib/server/points";
 import { visibleWhere } from "@/lib/server/posts";
 import { followingIds, postView, postViews } from "@/lib/server/views";
 import { CAPTION_MAX } from "@/lib/validation";
 
 // Un document MongoDB fait 16 Mo au plus : le média est stocké d'un bloc dans la collection media.
-const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
+const PUBLISH_LIMIT = 20;
+const PUBLISH_WINDOW_MS = 60 * 60 * 1000;
 const LIMIT = 60;
 const OBJECT_ID = /^[0-9a-f]{24}$/i;
 
@@ -54,7 +56,7 @@ async function exploreTiles(userId: string, visible: Prisma.PostWhereInput): Pro
  *   post:
  *     tags: [Posts]
  *     summary: Publier une photo ou un reel
- *     description: Le média (15 Mo maximum) est gardé dans MongoDB et servi par GET /api/media/{id}. Une vidéo crée un reel.
+ *     description: Image (AVIF, GIF, JPEG, PNG, WebP) ou vidéo (MP4, WebM), 4 Mo maximum ; le type déclaré doit correspondre aux premiers octets. Le média est gardé dans MongoDB et servi par GET /api/media/{id}. Une vidéo crée un reel. 20 publications par heure maximum.
  *     requestBody:
  *       required: true
  *       content:
@@ -63,12 +65,13 @@ async function exploreTiles(userId: string, visible: Prisma.PostWhereInput): Pro
  *             type: object
  *             required: [media]
  *             properties:
- *               media: { type: string, format: binary, description: Image ou vidéo }
+ *               media: { type: string, format: binary, description: Image ou vidéo, 4 Mo maximum }
  *               caption: { type: string, maxLength: 300 }
  *     responses:
  *       '201': { description: Post publié, content: { application/json: { schema: { allOf: [{ type: object, properties: { post: { $ref: '#/components/schemas/PostView' } } }, { $ref: '#/components/schemas/PointsResponse' }] } } } }
  *       '400': { $ref: '#/components/responses/InvalidInput' }
  *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '429': { $ref: '#/components/responses/RateLimited' }
  */
 // ?author=<id|username> · ?type=reel · ?saved=1 · ?explore=1 (mosaïque de la recherche)
 export const GET = route(async (request) => {
@@ -101,38 +104,38 @@ export const GET = route(async (request) => {
 // Publication : multipart avec « media » (image ou vidéo) et « caption ».
 export const POST = route(async (request) => {
   const user = await requireUser(request);
-  let form: FormData;
-  try {
-    form = await request.formData();
-  } catch {
-    throw new ApiError("INVALID_INPUT", "Corps multipart/form-data attendu.");
-  }
+  const form = await readMediaForm(request);
   const unknown = [...form.keys()].filter((key) => key !== "media" && key !== "caption");
   if (unknown.length) throw new ApiError("INVALID_INPUT", `Champ(s) inconnu(s) : ${unknown.join(", ")}.`);
-  const media = form.get("media");
   const caption = form.get("caption") ?? "";
-  if (!(media instanceof File) || !/^(image|video)\//.test(media.type)) {
-    throw new ApiError("INVALID_INPUT", "Champ « media » : image ou vidéo attendue.");
-  }
-  if (media.size > MAX_MEDIA_BYTES) throw new ApiError("INVALID_INPUT", "Fichier trop lourd (15 Mo max).");
   if (typeof caption !== "string" || caption.length > CAPTION_MAX) {
     throw new ApiError("INVALID_INPUT", `Légende : ${CAPTION_MAX} caractères maximum.`);
   }
+  const { mime, data } = await readMedia(form.get("media"));
 
+  // Chaque publication rapporte des points et remplit la base : nombre limité par heure.
   const now = new Date();
-  const stored = await db.media.create({
-    data: { ownerId: user.id, mime: media.type, data: new Uint8Array(await media.arrayBuffer()), createdAt: now },
+  const recent = await db.media.count({
+    where: { ownerId: user.id, createdAt: { gt: new Date(now.getTime() - PUBLISH_WINDOW_MS) } },
   });
-  const post = await db.post.create({
-    data: {
-      authorId: user.id,
-      type: media.type.startsWith("video/") ? "reel" : "photo",
-      mediaPath: `/api/media/${stored.id}`,
-      mediaMime: media.type,
-      location: "Ici",
-      caption: caption.trim(),
-      createdAt: now,
-    },
+  if (recent >= PUBLISH_LIMIT) {
+    throw new ApiError("RATE_LIMITED", `${PUBLISH_LIMIT} publications par heure maximum. Réessaie plus tard.`);
+  }
+
+  // Le média et son post sont écrits ensemble : pas de fichier orphelin si le post échoue.
+  const post = await inTransaction(undefined, async (tx) => {
+    const stored = await tx.media.create({ data: { ownerId: user.id, mime, data, createdAt: now } });
+    return tx.post.create({
+      data: {
+        authorId: user.id,
+        type: mime.startsWith("video/") ? "reel" : "photo",
+        mediaPath: `/api/media/${stored.id}`,
+        mediaMime: mime,
+        location: "Ici",
+        caption: caption.trim(),
+        createdAt: now,
+      },
+    });
   });
   const gains = await credit(user.id, POINTS.reaction, "post", "Publication", { refId: post.id });
   return json({ post: await postView(post, user.id), ...(await withPoints(user.id, gains)) }, 201);
