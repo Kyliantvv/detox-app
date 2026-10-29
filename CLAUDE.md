@@ -42,7 +42,7 @@ Node 22.9 ou plus (`--env-file-if-exists`). Variables : modèle dans `.env.examp
 - `JWT_SECRET`, `AUTH_SECRET` : obligatoires en production, valeurs de dev par défaut sinon.
 - `AUTH_TRUST_HOST=true` : sans lui, `next start` en local renvoie `UntrustedHost` sur toutes les routes NextAuth.
 - `MONGODB_URI` : la base de l'app et des scripts `db:*`. Base `dev` en développement, `prod` en production (le secret `MONGODB_URI_PROD` et la variable Vercel doivent viser `/prod`). Avec podman, viser `127.0.0.1` plutôt que `localhost` (IPv6).
-- `UPLOADTHING_TOKEN`, `FILES_API_SECRET` : `/api/files` uniquement. Le build passe sans elles.
+- `UPLOADTHING_TOKEN`, `FILES_API_SECRET` : `/api/files` et `POST /api/posts`. Le build passe sans elles.
 
 Comptes de la maquette, créés par `pnpm db:seed` : `alex@detox.test`, `lina@detox.test`, `karim@detox.test`… mot de passe `demo1234`. Comptes aléatoires `@seed.detox.local` : mot de passe `detox1234`. `admin@detox.app` et `user@detox.app` (rôles `admin` et `user`) sont créés par le seed s'ils n'existent pas, jamais modifiés ensuite ; mots de passe : `SEED_ADMIN_PASSWORD` / `SEED_USER_PASSWORD`, sinon tirés au hasard et affichés une seule fois par le seed.
 
@@ -104,13 +104,15 @@ export const POST = route(async (request, ctx: RouteContext<"/api/x/[id]">) => {
 - Le Flow tire chaque page d'une réserve de photos récentes (il repart du début quand il n'y en a plus) et la mémorise dans `FlowPage` pour la relire à l'identique.
 - Les réponses automatiques des comptes `bot` sont stockées avec un `createdAt` dans le futur et filtrées à la lecture. Il n'y a aucun timer serveur. Leurs premiers messages (`STARTER_MESSAGES`, `lib/server/content.ts`) amorcent le fil à la première lecture.
 
-### Médias : deux circuits distincts
+### Médias : UploadThing en deux temps
 
-- **`POST /api/posts`** (multipart `media` + `caption`) garde le fichier dans la collection `media` (15 Mo max, limite d'un document Mongo). `GET /api/media/[id]` le sert.
-- **`/api/files`** passe par `files-sdk` vers UploadThing. Il n'est pas encore relié aux posts ni authentifié.
-  - `lib/upload-router.ts` n'autorise que les opérations `upload` et `url`.
-  - Il refuse une clé choisie par le client et n'accepte que des images, sans SVG : il vérifie le type déclaré et les premiers octets (`lib/image-signature.ts`).
-  - 4 Mo maximum par fichier.
+1. **`/api/files`** (`files-sdk`, protocole presign → PUT → complete) envoie le fichier sur UploadThing.
+   - Bearer exigé au presign et au complete ; le PUT entre les deux porte le jeton signé du presign.
+   - `lib/upload-router.ts` n'autorise que l'opération `upload`. Il refuse une clé choisie par le client et n'accepte que les images (sans SVG) et les vidéos MP4/WebM de `lib/media-types.ts` : il vérifie le type déclaré et les premiers octets (`lib/media-signature.ts`).
+   - 4 Mo maximum : le fichier transite par le serveur (limite Vercel de 4,5 Mo par requête).
+   - Chaque envoi vérifié crée un document `Media` (clé, auteur, type, taille).
+2. **`POST /api/posts`** (JSON `mediaKey` + `caption`) réserve ce `Media` (`usedAt`, une seule fois, par son auteur seulement) et stocke l'URL publique du CDN dans `mediaPath`. Une vidéo crée un reel.
+   - Sur MongoDB, le filtre Prisma `usedAt: null` ignore un champ absent : `Media` est créé avec `usedAt: null` explicite.
   - Le client UploadThing (`lib/files.ts`) et le routeur sont créés à la première requête, pas à l'import, pour que `next build` passe sans variables.
 
 ### Authentification (deux couches)
@@ -119,7 +121,7 @@ export const POST = route(async (request, ctx: RouteContext<"/api/x/[id]">) => {
    - provider `credentials`, qui appelle `lib/server/accounts.ts` (fonctions aussi utilisées par `POST /api/auth/{login,register}`);
    - session JWT dans un cookie httpOnly ;
    - la session expose `session.accessToken`, le JWT de l'API, ré-émis par le callback `jwt` s'il a expiré.
-2. **API** : HS256 maison dans `lib/server/auth.ts`. `requireUser` n'accepte **que** le Bearer, pas le cookie NextAuth. Seule exception : `/api/media/[id]` accepte aussi le cookie, parce qu'une balise `<img>` n'envoie pas de Bearer.
+2. **API** : HS256 maison dans `lib/server/auth.ts`. `requireUser` n'accepte **que** le Bearer, pas le cookie NextAuth. Les médias publiés sont servis par le CDN UploadThing, sans authentification (clé aléatoire).
 
 `proxy.ts` (le middleware renommé de Next 16) redirige les pages selon la session. Son matcher exclut les fichiers statiques **par extension** : les pseudos contiennent des points (`/u/lina.m`).
 
@@ -140,13 +142,13 @@ Le type `JWT` de `@auth/core` n'est pas augmentable (pnpm ne hoiste pas ce paque
 
 Deux projets dans `vitest.config.mts` :
 
-- **`unit`** : tests sans base (`lib/game`, `lib/server/http`, `lib/server/auth`, `proxy.ts`, `/api/openapi`, `/api/files`, scripts). Toujours lancés.
+- **`unit`** : tests sans base (`lib/game`, `lib/server/http`, `lib/server/auth`, `proxy.ts`, `/api/openapi`, scripts). Toujours lancés.
 - **`db`** : routes (`app/api/**`), `lib/server/{points,recommend,require-user}.test.ts` et `lib/db/db.test.ts`. Lancés seulement si `TEST_MONGODB_URI` est défini (base dont le nom finit par `_test`). `test/db-global.ts` pousse le schéma et les index une fois ; `test/db-setup.ts` vide la base et la remplit avec la maquette avant **chaque** test ; un fichier à la fois.
 
 - Les tests de routes sont colocalisés (`app/api/<domaine>/<domaine>.test.ts`) et appellent directement les handlers exportés par `route.ts`, sans serveur, via `call()` de `test/api.ts` : `call(likes.POST, { as: "alex", params: { id: POSTS.c1 } })`. `as` accepte un prénom de la maquette ou un id brut et signe un Bearer, `token` envoie un Bearer brut, `body` est un objet JSON, une `FormData` ou une chaîne.
 - `test/db.ts` : `USERS` et `POSTS` (ids fixes de la maquette), `userRow("alex")` relit un compte, `postKeys(items)` redonne `c1`, `f7`… Pour préparer un cas particulier, écrire directement avec `db` (Prisma).
 - Aléatoire : `vi.spyOn(Math, "random")`. Temps : `freezeTime()` et `advanceTime()` de `test/api.ts`, qui ne simulent que `Date`. Les `@default(now())` de Prisma sont calculés par le moteur, pas par `Date` : passer `createdAt: new Date()` quand un test joue avec l'horloge.
-- Modules mockés : `@/auth` pour `/api/media` et `proxy.ts`, parce que `auth()` lit `next/headers` hors requête ; `@/lib/files` pour `/api/files`.
+- Modules mockés : `@/auth` pour `proxy.ts`, parce que `auth()` lit `next/headers` hors requête ; `@/lib/files` (adaptateur mémoire de `files-sdk`) pour `/api/files` et `/api/posts`.
 - `next-auth` est inliné dans `vitest.config.mts` (il importe `next/server` sans extension) et `server-only` est remplacé par un module vide.
 
 ### CI

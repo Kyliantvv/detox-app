@@ -5,15 +5,26 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import { createFiles } from "files-sdk";
+import { createFiles, type FileInfo } from "files-sdk";
 import { createFilesClient } from "files-sdk/client";
 import { memory } from "files-sdk/memory";
 import request from "supertest";
-import { createUploadRouter, MAX_UPLOAD_SIZE } from "./upload-router";
+import { MAX_UPLOAD_SIZE } from "./media-types";
+import { createUploadRouter } from "./upload-router";
+
+// Stands in for the API's Bearer check: "Bearer <user id>".
+const AUTH = { authorization: "Bearer alex" };
+const authenticate = (req: Request) =>
+  Promise.resolve(req.headers.get("authorization")?.replace(/^Bearer /, "") || null);
 
 const setup = () => {
   const files = createFiles({ adapter: memory() });
-  const router = createUploadRouter(files, "test-secret");
+  const uploads: { file: FileInfo; ownerId: string }[] = [];
+  const router = createUploadRouter(files, {
+    secret: "test-secret",
+    authenticate,
+    onUpload: (file, ownerId) => Promise.resolve(void uploads.push({ file, ownerId })),
+  });
 
   // Node server around the Web-standard handler, for Supertest. A fixed origin
   // keeps upload tokens valid across requests (Supertest picks a new port
@@ -50,11 +61,12 @@ const setup = () => {
   // The upload protocol is three requests; let the SDK client drive it.
   const client = createFilesClient({
     endpoint: "http://localhost/api/files",
+    headers: AUTH,
     fetchImpl: ((input: RequestInfo | URL, init?: RequestInit) =>
       router.handle(new Request(input, init))) as typeof fetch,
   });
 
-  return { files, server, client };
+  return { files, server, client, uploads };
 };
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -68,7 +80,13 @@ const pngBytes = (size = 16) => {
 const image = (size = 16, name = "photo.png", type = "image/png") =>
   new File([pngBytes(size)], name, { type });
 
-type Presigned = { key: string; target: { url: string } };
+// An MP4 starts with an `ftyp` box: size, "ftyp", brand.
+const mp4 = () =>
+  new File([new Uint8Array([0, 0, 0, 0x18, ...new TextEncoder().encode("ftypisom"), 0, 0, 0, 0])], "clip.mp4", {
+    type: "video/mp4",
+  });
+
+type Presigned = { id: string; key: string; target: { url: string } };
 
 // First step of the upload protocol, done by hand to send the PUT ourselves.
 const presign = async (
@@ -77,17 +95,18 @@ const presign = async (
 ) => {
   const res = await request(server)
     .post("/")
+    .set(AUTH)
     .send({ op: "presign", files: [file] });
   const [upload] = (res.body as { uploads: Presigned[] }).uploads;
   const { pathname, search } = new URL(upload.target.url);
-  return { key: upload.key, path: pathname + search };
+  return { id: upload.id, key: upload.key, path: pathname + search };
 };
 
 describe("POST /api/files", () => {
   it("answers capabilities", async () => {
     const { server } = setup();
 
-    const res = await request(server).post("/").send({ op: "capabilities" });
+    const res = await request(server).post("/").set(AUTH).send({ op: "capabilities" });
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("capabilities");
@@ -97,10 +116,11 @@ describe("POST /api/files", () => {
     ["list", { op: "list" }],
     ["delete", { op: "delete", key: "x.png" }],
     ["head", { op: "head", key: "x.png" }],
+    ["url", { op: "url", key: "x.png" }],
   ])("refuses %s with 403", async (op, body) => {
     const { server } = setup();
 
-    const res = await request(server).post("/").send(body);
+    const res = await request(server).post("/").set(AUTH).send(body);
 
     expect(res.status).toBe(403);
     expect(res.body).toEqual({
@@ -127,11 +147,47 @@ describe("upload", () => {
     expect(key).toMatch(/\.png$/);
   });
 
-  it("returns a URL for an uploaded file", async () => {
-    const { client } = setup();
+  it("hands each verified upload to onUpload with its owner", async () => {
+    const { client, uploads } = setup();
+
     const { key } = await client.upload(image());
 
-    await expect(client.url(key)).resolves.toEqual(expect.any(String));
+    expect(uploads).toEqual([
+      { file: expect.objectContaining({ key, contentType: "image/png", size: 16 }), ownerId: "alex" },
+    ]);
+  });
+
+  it("accepts videos", async () => {
+    const { client, uploads } = setup();
+
+    const { key } = await client.upload(mp4());
+
+    expect(key).toMatch(/\.mp4$/);
+    expect(uploads[0].file.contentType).toBe("video/mp4");
+  });
+
+  it("refuses a presign without a Bearer", async () => {
+    const { files, server } = setup();
+
+    const res = await request(server)
+      .post("/")
+      .send({ op: "presign", files: [{ name: "photo.png", type: "image/png" }] });
+
+    expect(res.status).toBe(401);
+    expect((await files.list()).items).toEqual([]);
+  });
+
+  it("refuses a complete without a Bearer", async () => {
+    const { server, uploads } = setup();
+    const { id, key, path } = await presign(server, { name: "photo.png", type: "image/png" });
+    await request(server).put(path).set("content-type", "image/png").send(Buffer.from(pngBytes()));
+
+    const res = await request(server)
+      .post("/")
+      .send({ op: "complete", completions: [{ id, key }] });
+
+    expect(res.status).toBe(401);
+    expect(uploads).toEqual([]);
   });
 
   it("rejects uploads over the size cap", async () => {
@@ -152,7 +208,7 @@ describe("upload", () => {
 
     await expect(client.upload(image(16, name, type))).rejects.toMatchObject({
       code: "Invalid",
-      message: "only images can be uploaded",
+      message: "only images and videos can be uploaded",
     });
   });
 
@@ -161,6 +217,7 @@ describe("upload", () => {
 
     const res = await request(server)
       .post("/")
+      .set(AUTH)
       .send({ op: "presign", files: [{ name: "photo.png", type: "" }] });
 
     expect(res.status).toBe(422);
@@ -175,7 +232,7 @@ describe("upload", () => {
 
     await expect(client.upload(svg)).rejects.toMatchObject({
       code: "Invalid",
-      message: "file content is not the declared image type",
+      message: "file content is not the declared type",
     });
     expect((await files.list()).items).toEqual([]);
   });
@@ -222,6 +279,7 @@ describe("upload", () => {
 
     const res = await request(server)
       .put("/?op=upload&key=photo.png")
+      .set(AUTH)
       .set("content-type", "image/png")
       .send(Buffer.from(pngBytes()));
 

@@ -28,7 +28,7 @@ import * as user from "./users/[username]/route";
 
 
 const post = { id: POSTS.c1 };
-// /api/media accepte aussi le cookie NextAuth : testée à part (app/api/media).
+// /api/files répond au format files-sdk : testée à part (app/api/files).
 const PROTECTED: [string, Handler<never>, CallOptions?][] = [
   ["GET /api/me", me.GET],
   ["PATCH /api/me", me.PATCH, { method: "PATCH" }],

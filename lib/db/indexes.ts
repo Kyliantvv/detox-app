@@ -36,6 +36,7 @@ const REQUIRED_INDEXES = [
   uniqueIndex("skill_purchases", "buyerId", "targetId", "skill"),
   uniqueIndex("shop_items", "slug"),
   uniqueIndex("flow_pages", "userId", "page"),
+  uniqueIndex("media", "key"),
   ...EXTRA_INDEXES.map(({ collection, index }) => [collection, index.name]),
 ];
 

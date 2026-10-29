@@ -1233,21 +1233,20 @@
           "Posts"
         ],
         "summary": "Publier une photo ou un reel",
-        "description": "Le média (15 Mo maximum) est gardé dans MongoDB et servi par GET /api/media/{id}. Une vidéo crée un reel.",
+        "description": "Le média est d'abord envoyé sur UploadThing par /api/files ; sa clé ne sert qu'à un post, de son auteur. Une vidéo crée un reel.",
         "requestBody": {
           "required": true,
           "content": {
-            "multipart/form-data": {
+            "application/json": {
               "schema": {
                 "type": "object",
                 "required": [
-                  "media"
+                  "mediaKey"
                 ],
                 "properties": {
-                  "media": {
+                  "mediaKey": {
                     "type": "string",
-                    "format": "binary",
-                    "description": "Image ou vidéo"
+                    "description": "Clé rendue par /api/files"
                   },
                   "caption": {
                     "type": "string",
@@ -1286,6 +1285,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -1734,53 +1736,6 @@
         }
       }
     },
-    "/api/media/{id}": {
-      "get": {
-        "tags": [
-          "Posts"
-        ],
-        "summary": "Fichier d'un post",
-        "description": "Accepte le Bearer ou le cookie de session NextAuth, parce qu'une balise `<img>` n'envoie pas de Bearer.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Le fichier",
-            "content": {
-              "image/*": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              },
-              "video/*": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidInput"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          }
-        }
-      }
-    },
     "/api/me": {
       "get": {
         "tags": [
@@ -2018,28 +1973,18 @@
       }
     },
     "/api/files": {
-      "get": {
-        "tags": [
-          "Fichiers"
-        ],
-        "summary": "URL d'un fichier téléversé",
-        "description": "Géré par files-sdk (UploadThing). Images uniquement, 4 Mo maximum. Pas encore relié aux posts.",
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Réponse du routeur files-sdk"
-          }
-        }
-      },
       "post": {
         "tags": [
           "Fichiers"
         ],
-        "summary": "Préparer un téléversement",
-        "security": [],
+        "summary": "Préparer puis valider un téléversement (protocole files-sdk)",
+        "description": "`{\"op\":\"presign\",\"files\":[{name,type,size}]}` renvoie la clé et l'URL du PUT ; `{\"op\":\"complete\",\"completions\":[{id,key}]}` vérifie le fichier et le lie au compte. Images (AVIF, GIF, JPEG, PNG, WebP) ou vidéos (MP4, WebM), 4 Mo maximum. La clé obtenue se passe ensuite à POST /api/posts.",
         "responses": {
           "200": {
             "description": "Réponse du routeur files-sdk"
+          },
+          "401": {
+            "description": "Bearer manquant ou invalide"
           }
         }
       },
@@ -2047,7 +1992,8 @@
         "tags": [
           "Fichiers"
         ],
-        "summary": "Téléverser un fichier",
+        "summary": "Envoyer le fichier (URL rendue par presign)",
+        "description": "Authentifié par le jeton signé de presign, sans Bearer.",
         "security": [],
         "responses": {
           "200": {

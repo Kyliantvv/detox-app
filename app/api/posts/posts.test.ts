@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
+import { getFiles } from "@/lib/files";
 import { POINTS } from "@/lib/game";
 import { CAPTION_MAX, COMMENT_MAX } from "@/lib/validation";
 import { apiError, call } from "@/test/api";
@@ -10,12 +12,21 @@ import * as likes from "./[id]/likes/route";
 import * as saves from "./[id]/saves/route";
 import * as posts from "./route";
 
-const upload = (fields: Record<string, string | File>) => {
-  const form = new FormData();
-  for (const [name, value] of Object.entries(fields)) form.set(name, value);
-  return form;
-};
-const png = () => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "photo.png", { type: "image/png" });
+// Le stockage UploadThing est remplacé par l'adaptateur mémoire de files-sdk.
+vi.mock("@/lib/files", async () => {
+  const { createFiles } = await import("files-sdk");
+  const { memory } = await import("files-sdk/memory");
+  const files = createFiles({ adapter: memory() });
+  return { getFiles: () => files };
+});
+
+// Ce que laisse un envoi par /api/files : le fichier stocké et sa ligne `media` (testé dans app/api/files).
+async function uploaded(who: keyof typeof USERS, mime = "image/png") {
+  const key = `${randomUUID()}.${mime.split("/")[1]}`;
+  await getFiles().upload(key, new Uint8Array(8), { contentType: mime });
+  await db.media.create({ data: { key, ownerId: USERS[who], mime, size: 8, usedAt: null } });
+  return key;
+}
 
 describe("GET /api/posts", () => {
   it("renvoie la mosaïque d'exploration, rangée sous les filtres de la Recherche", async () => {
@@ -89,8 +100,10 @@ describe("GET /api/posts", () => {
 });
 
 describe("POST /api/posts", () => {
-  it("publie une image, la sert depuis /api/media et crédite la publication", async () => {
-    const res = await call(posts.POST, { as: "alex", body: upload({ media: png(), caption: "  Vue sur mon écran.  " }) });
+  it("publie une image envoyée par /api/files et crédite la publication", async () => {
+    const mediaKey = await uploaded("alex");
+
+    const res = await call(posts.POST, { as: "alex", body: { mediaKey, caption: "  Vue sur mon écran.  " } });
 
     expect(res.status).toBe(201);
     expect(res.body.post).toMatchObject({
@@ -98,7 +111,7 @@ describe("POST /api/posts", () => {
       caption: "Vue sur mon écran.",
       isReel: false,
       doses: 0,
-      imageUrl: expect.stringMatching(/^\/api\/media\/[0-9a-f]{24}$/),
+      imageUrl: await getFiles().url(mediaKey),
     });
     expect(res.body.post.videoUrl).toBeUndefined();
     expect(res.body.gains).toEqual([expect.objectContaining({ amount: POINTS.reaction, label: "Publication" })]);
@@ -106,28 +119,52 @@ describe("POST /api/posts", () => {
   });
 
   it("publie une vidéo comme reel", async () => {
-    const video = new File([new Uint8Array(8)], "clip.mp4", { type: "video/mp4" });
+    const mediaKey = await uploaded("alex", "video/mp4");
 
-    const res = await call(posts.POST, { as: "alex", body: upload({ media: video }) });
+    const res = await call(posts.POST, { as: "alex", body: { mediaKey } });
 
-    expect(res.body.post).toMatchObject({ isReel: true, caption: "", videoUrl: expect.stringMatching(/^\/api\/media\//) });
+    expect(res.body.post).toMatchObject({ isReel: true, caption: "", videoUrl: await getFiles().url(mediaKey) });
   });
 
   it("fait apparaître le post dans le cercle de son auteur", async () => {
-    const { body } = await call(posts.POST, { as: "alex", body: upload({ media: png() }) });
+    const { body } = await call(posts.POST, { as: "alex", body: { mediaKey: await uploaded("alex") } });
 
     const res = await call(circle.GET, { as: "alex" });
 
     expect(res.body.items[0].id).toBe(body.post.id);
   });
 
+  it("refuse le fichier d'un autre compte", async () => {
+    const mediaKey = await uploaded("lina");
+
+    const res = await call(posts.POST, { as: "alex", body: { mediaKey } });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(apiError("NOT_FOUND", "Média introuvable ou déjà publié."));
+  });
+
+  it("ne publie un fichier qu'une fois, même en parallèle", async () => {
+    const mediaKey = await uploaded("alex");
+    const before = await db.post.count();
+
+    const results = await Promise.all([1, 2].map(() => call(posts.POST, { as: "alex", body: { mediaKey } })));
+
+    expect(results.map((res) => res.status).sort()).toEqual([201, 404]);
+    expect(await db.post.count()).toBe(before + 1);
+  });
+
+  it("refuse une clé jamais envoyée", async () => {
+    const res = await call(posts.POST, { as: "alex", body: { mediaKey: `${randomUUID()}.png` } });
+
+    expect(res.status).toBe(404);
+  });
+
   it.each([
-    ["sans média", upload({ caption: "légende" }), "Champ « media » : image ou vidéo attendue."],
-    ["un média texte", upload({ media: new File(["hello"], "a.txt", { type: "text/plain" }) }), "Champ « media » : image ou vidéo attendue."],
-    ["un média en texte brut", upload({ media: "pas un fichier" }), "Champ « media » : image ou vidéo attendue."],
-    ["une légende trop longue", upload({ media: png(), caption: "x".repeat(CAPTION_MAX + 1) }), `Légende : ${CAPTION_MAX} caractères maximum.`],
-    ["un champ inconnu", upload({ media: png(), authorId: "lina" }), "Champ(s) inconnu(s) : authorId."],
-    ["un corps JSON", JSON.stringify({ caption: "x" }), "Corps multipart/form-data attendu."],
+    ["sans média", { caption: "légende" }, "Champ « mediaKey » : string attendu."],
+    ["une clé mal formée", { mediaKey: "../a.png" }, "mediaKey mal formé."],
+    ["une légende trop longue", { mediaKey: "a.png", caption: "x".repeat(CAPTION_MAX + 1) }, `Légende : ${CAPTION_MAX} caractères maximum.`],
+    ["un champ inconnu", { mediaKey: "a.png", authorId: "lina" }, "Champ(s) inconnu(s) : authorId."],
+    ["un corps multipart", new FormData(), "Corps JSON invalide."],
   ])("refuse %s", async (_, body, message) => {
     const before = await db.post.count();
 
@@ -137,14 +174,6 @@ describe("POST /api/posts", () => {
     expect(res.body).toEqual(apiError("INVALID_INPUT", message));
     expect(await db.post.count()).toBe(before);
     expect((await userRow("alex")).points).toBe(2455);
-  });
-
-  it("refuse un fichier de plus de 15 Mo", async () => {
-    const big = new File([new Uint8Array(15 * 1024 * 1024 + 1)], "big.png", { type: "image/png" });
-
-    const res = await call(posts.POST, { as: "alex", body: upload({ media: big }) });
-
-    expect(res.body).toEqual(apiError("INVALID_INPUT", "Fichier trop lourd (15 Mo max)."));
   });
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 // Accès à l'API depuis le front : chaque requête porte le JWT de l'API (session NextAuth) en Bearer.
+import { createFilesClient } from "files-sdk/client";
 import { signOut, useSession } from "next-auth/react";
 import { useMemo } from "react";
 import useSWR, { type SWRConfiguration } from "swr";
@@ -31,6 +32,26 @@ async function apiFetch<T>(path: string, token: string, init: RequestInit = {}):
   return data as T;
 }
 
+// Messages du routeur files-sdk (lib/upload-router.ts), en anglais, traduits pour l'interface.
+const UPLOAD_ERRORS: Record<string, string> = {
+  "only images and videos can be uploaded": "Format refusé : image ou vidéo attendue.",
+  "file content is not the declared type": "Le contenu du fichier ne correspond pas à son format.",
+  "upload exceeds maxUploadSize": "Fichier trop lourd.",
+};
+
+// Envoi d'un fichier par /api/files (presign, PUT, complete) ; renvoie sa clé, à passer à POST /api/posts.
+async function uploadFile(file: File, token: string): Promise<string> {
+  const client = createFilesClient({ endpoint: "/api/files", headers: { Authorization: `Bearer ${token}` } });
+  try {
+    return (await client.upload(file)).key;
+  } catch (error) {
+    // Le client lève des FilesError ({code, message}), sans exporter la classe.
+    if (!(error instanceof Error && "code" in error)) throw new ApiClientError("NETWORK", "Le serveur ne répond pas.", 0);
+    if (error.code === "Unauthorized") void signOut({ redirectTo: "/connexion" });
+    throw new ApiClientError("INVALID_INPUT", UPLOAD_ERRORS[error.message] ?? "Envoi du fichier impossible.", 400);
+  }
+}
+
 const encode = (body: unknown) => (body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body));
 
 // Actions (POST, PATCH, DELETE) liées au token de la session courante.
@@ -47,6 +68,10 @@ export function useApi() {
       post: <T>(path: string, body?: unknown) => call<T>("POST", path, body),
       patch: <T>(path: string, body?: unknown) => call<T>("PATCH", path, body),
       del: <T>(path: string) => call<T>("DELETE", path),
+      upload: (file: File) =>
+        token
+          ? uploadFile(file, token)
+          : Promise.reject(new ApiClientError("UNAUTHORIZED", "Session en cours de chargement.", 401)),
     };
   }, [token]);
 }

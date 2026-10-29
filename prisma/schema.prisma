@@ -180,7 +180,7 @@ model Post {
   authorId      String     @db.ObjectId
   author        User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
   type          PostType
-  // `/api/media/<id>` pour un média publié ; chemin fictif pour le seed ; absent
+  // URL UploadThing pour un média publié ; chemin fictif pour le seed ; absent
   // pour un post de la maquette, qui n'a que son visuel `art`.
   mediaPath     String?
   mediaMime     String?
@@ -481,15 +481,17 @@ model Draw {
   @@map("draws")
 }
 
-// Média publié avec un post (POST /api/posts), servi par GET /api/media/[id].
-// Un document MongoDB fait 16 Mo au plus : la route limite le fichier à 15 Mo.
+// Fichier envoyé sur UploadThing par /api/files. Le document lie la clé à son
+// auteur ; POST /api/posts le consomme (`usedAt`) : une clé ne sert qu'à un post.
 model Media {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  ownerId   String   @db.ObjectId
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  key       String    @unique
+  ownerId   String    @db.ObjectId
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   mime      String
-  data      Bytes
-  createdAt DateTime @default(now())
+  size      Int
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@map("media")
 }
