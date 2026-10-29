@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CloseIcon } from "./icons";
 
 // Fenêtre modale en bas d'écran : Échap ou clic sur le fond pour fermer, focus placé dedans.
+// Rendue dans <body> : ouverte depuis un conteneur `fixed` (les reels), elle passerait sous la barre de navigation.
 export default function Dialog({
   title,
   onClose,
@@ -26,7 +28,7 @@ export default function Dialog({
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/70 backdrop-blur-sm" onClick={onClose}>
       <div
         ref={panel}
@@ -45,6 +47,7 @@ export default function Dialog({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
