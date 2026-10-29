@@ -28,3 +28,7 @@ export async function thread(me: Pick<User, "id">, other: Pick<User, "id" | "use
   }
   return db.conversation.findUniqueOrThrow({ where: { id: conversation.id } });
 }
+
+// Aperçu d'un message dans la liste des conversations : son texte, sinon le type du média joint.
+export const messagePreview = (message: { text: string; mediaMime?: string | null }) =>
+  message.text || (message.mediaMime?.startsWith("video/") ? "🎬 Vidéo" : "📷 Photo");

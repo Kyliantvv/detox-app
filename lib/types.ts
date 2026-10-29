@@ -78,6 +78,7 @@ export type ChatMessage = {
   id: string;
   from: "me" | "them";
   text: string;
+  media?: { url: string; mime: string };
   at: number;
 };
 

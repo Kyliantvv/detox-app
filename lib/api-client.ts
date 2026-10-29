@@ -39,7 +39,8 @@ const UPLOAD_ERRORS: Record<string, string> = {
   "upload exceeds maxUploadSize": "Fichier trop lourd.",
 };
 
-// Envoi d'un fichier par /api/files (presign, PUT, complete) ; renvoie sa clé, à passer à POST /api/posts.
+// Envoi d'un fichier par /api/files (presign, PUT, complete) ; renvoie sa clé, à passer à POST /api/posts
+// ou à un message.
 async function uploadFile(file: File, token: string): Promise<string> {
   const client = createFilesClient({ endpoint: "/api/files", headers: { Authorization: `Bearer ${token}` } });
   try {

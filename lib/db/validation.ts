@@ -28,7 +28,8 @@ const RULES: Partial<Record<Prisma.ModelName, ModelRules>> = {
   },
   Post: { fields: { caption: { maxLength: 2200 }, location: { maxLength: 80 } } },
   Comment: { fields: { text: { trim: true, required: true, maxLength: 500 } } },
-  Message: { fields: { text: { trim: true, required: true, maxLength: 2000 } } },
+  // Texte vide permis : une photo peut partir seule (la route exige un texte ou un média).
+  Message: { fields: { text: { trim: true, maxLength: 2000 } } },
   Conversation: { fields: { lastMessagePreview: { maxLength: 100 } } },
   ShopItem: { fields: { price: { min: 0 } } },
   Order: { fields: { quantity: { min: 1 } } },

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import type { ConversationItem } from "@/lib/types";
 import { requireUser } from "@/lib/server/auth";
-import { thread } from "@/lib/server/conversations";
+import { messagePreview, thread } from "@/lib/server/conversations";
 import { formatAgo } from "@/lib/server/format";
 import { json, route } from "@/lib/server/http";
 import { author } from "@/lib/server/views";
@@ -43,7 +43,7 @@ export const GET = route(async (request) => {
       return {
         id: other.id,
         user: author(other),
-        preview: last.text,
+        preview: messagePreview(last),
         fromMe: last.senderId === user.id,
         ago: formatAgo(last.createdAt, now.getTime()),
         at: last.createdAt.getTime(),
