@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback, useState } from "react";
 import Avatar from "@/components/avatar";
 import { CommentIcon, HeartIcon, SendIcon } from "@/components/icons";
 import { PostMedia, useDose } from "@/components/post-card";
+import ShareSheet from "@/components/share-sheet";
 import { PointsPill } from "@/components/top-bar";
 import { useApiData, useMe } from "@/lib/api-client";
 import type { PostView } from "@/lib/types";
@@ -31,6 +33,9 @@ export default function ReelsPage() {
 
 function Reel({ reel }: { reel: PostView }) {
   const { dosed, doses, toggle } = useDose(reel);
+  const [sharing, setSharing] = useState(false);
+  // Stable : Dialog replace le focus à chaque nouvelle fonction de fermeture.
+  const closeShare = useCallback(() => setSharing(false), []);
   const username = reel.author?.username ?? "compte supprimé";
 
   return (
@@ -65,12 +70,19 @@ function Reel({ reel }: { reel: PostView }) {
               <CommentIcon size={28} />
               {reel.comments.length}
             </span>
-            <Link href="/messages" aria-label="Envoyer" className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setSharing(true)}
+              aria-haspopup="dialog"
+              aria-label="Partager"
+              className="flex flex-col items-center gap-1"
+            >
               <SendIcon size={28} />
-            </Link>
+            </button>
           </div>
         </div>
       </div>
+      {sharing && <ShareSheet postId={reel.id} onClose={closeShare} />}
     </section>
   );
 }
