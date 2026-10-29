@@ -1,29 +1,34 @@
 import { describe, expect, it, vi } from "vitest";
-import { CHEST_EVERY_PAGES, POINTS } from "@/lib/game";
-import { accountOf, db, followingOf } from "@/lib/server/db";
+import { db, parisDay } from "@/lib/db";
+import { CHEST_EVERY_PAGES, POINTS, SERENITY_LOSS_PER_PAGE } from "@/lib/game";
 import { apiError, call } from "@/test/api";
+import { USERS, postKeys } from "@/test/db";
 import * as circle from "./circle/route";
 import * as flow from "./flow/route";
 
-const ids = (items: { id: string }[]) => items.map((item) => item.id);
-
 describe("GET /api/feed/circle", () => {
-  it("renvoie les posts des comptes suivis, sans les reels, du plus récent au plus ancien", async () => {
+  it("renvoie les photos des comptes suivis, sans les reels, du plus récent au plus ancien", async () => {
     const res = await call(circle.GET, { as: "alex" });
 
     expect(res.status).toBe(200);
-    expect(ids(res.body.items)).toEqual(["c1", "c2", "c3", "c4"]);
-    expect(res.body.items[0]).toMatchObject({ author: { id: "lina", username: "lina.m" }, doses: 1248, dosedByMe: false });
+    expect(postKeys(res.body.items).slice(0, 4)).toEqual(["c1", "c2", "f0", "f1"]);
+    expect(res.body.items.some((post: { isReel: boolean }) => post.isReel)).toBe(false);
+    expect(res.body.items[0]).toMatchObject({
+      author: { id: USERS.lina, username: "lina.m", name: "Lina" },
+      ago: "il y a 3 min",
+      doses: 1248,
+      dosedByMe: false,
+    });
   });
 
   it("ne garde que les comptes suivis et mes propres posts", async () => {
-    followingOf("alex").clear();
-    followingOf("alex").add("karim");
-    db().posts.set("mine", { ...db().posts.get("c1")!, id: "mine", authorId: "alex", createdAt: Date.now() });
+    await db.follow.deleteMany({ where: { followerId: USERS.alex, followingId: { not: USERS.karim } } });
+    const mine = await db.post.create({ data: { authorId: USERS.alex, type: "photo", caption: "À moi" } });
 
     const res = await call(circle.GET, { as: "alex" });
 
-    expect(ids(res.body.items)).toEqual(["mine", "c2"]);
+    expect(res.body.items[0].id).toBe(mine.id);
+    expect(res.body.items.slice(1).every((post: { authorId: string }) => post.authorId === USERS.karim)).toBe(true);
   });
 });
 
@@ -32,14 +37,21 @@ describe("GET /api/feed/flow", () => {
   const noBonus = () => vi.spyOn(Math, "random").mockReturnValue(0.99);
   const read = (page: string) => call(flow.GET, { as: "alex", query: { page } });
 
-  it("renvoie 5 posts déterministes et crédite la page", async () => {
+  // Le choix des posts est testé dans lib/server/recommend.test.ts.
+  it("renvoie 5 posts recommandés et crédite la page", async () => {
     noBonus();
 
     const res = await read("0");
 
     expect(res.status).toBe(200);
-    expect(ids(res.body.items)).toEqual(["f0", "f1", "f2", "f3", "f4"]);
-    expect(res.body).toMatchObject({ page: 0, nextPage: 1, serenity: 97, points: 2455 + POINTS.flowPage });
+    expect(res.body.items).toHaveLength(5);
+    for (const item of res.body.items) expect(item.reason).toEqual(expect.any(String));
+    expect(res.body).toMatchObject({
+      page: 0,
+      nextPage: 1,
+      serenity: 100 - SERENITY_LOSS_PER_PAGE,
+      points: 2455 + POINTS.flowPage,
+    });
     expect(res.body.gains).toEqual([expect.objectContaining({ amount: POINTS.flowPage, label: "Page 1 du Flow" })]);
   });
 
@@ -51,15 +63,16 @@ describe("GET /api/feed/flow", () => {
     expect(res.body.page).toBe(0);
   });
 
-  it("ne crédite pas deux fois la même page", async () => {
+  it("ne crédite pas deux fois la même page et la relit à l'identique", async () => {
     noBonus();
-    await read("3");
+    const first = await read("3");
 
     const res = await read("3");
 
     expect(res.body.gains).toEqual([]);
     expect(res.body.points).toBe(2455 + POINTS.flowPage);
-    expect(res.body.serenity).toBe(97);
+    expect(res.body.serenity).toBe(100 - SERENITY_LOSS_PER_PAGE);
+    expect(res.body.items.map((item: { id: string }) => item.id)).toEqual(first.body.items.map((item: { id: string }) => item.id));
   });
 
   it(`ouvre un coffre toutes les ${CHEST_EVERY_PAGES} pages lues`, async () => {
@@ -90,20 +103,34 @@ describe("GET /api/feed/flow", () => {
 
   it("ne descend jamais la sérénité sous 0", async () => {
     noBonus();
-    accountOf("alex").serenity = 2;
+    for (let page = 1; page <= 40; page++) {
+      await db.pointEvent.create({
+        data: { userId: USERS.alex, amount: 10, type: "flow_page", flowPage: 1000 + page, day: parisDay() },
+      });
+    }
 
     const res = await read("0");
 
     expect(res.body.serenity).toBe(0);
   });
 
-  it("n'annonce pas de page suivante après la dernière", async () => {
+  it("n'annonce pas de page suivante après la dernière, et le Flow reprend du début", async () => {
     noBonus();
 
     const res = await read("10000");
 
     expect(res.status).toBe(200);
     expect(res.body.nextPage).toBeNull();
+    expect(res.body.items).toHaveLength(5);
+  });
+
+  it("ne propose pas les posts d'un compte qui n'a pas le droit de les voir", async () => {
+    noBonus();
+    await db.post.updateMany({ where: { authorId: USERS.lina }, data: { visibility: "closeFriends" } });
+
+    const res = await read("0");
+
+    expect(res.body.items.some((post: { authorId: string }) => post.authorId === USERS.lina)).toBe(false);
   });
 
   it.each(["-1", "abc", "1.5", "1e3", "", "10001"])("refuse page=%j", async (page) => {

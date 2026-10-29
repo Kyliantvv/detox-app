@@ -1,0 +1,28 @@
+name: Prod smoke test
+
+# Vérifie, en lecture seule, que la base de production répond : test de connexion puis
+# nombre de documents par collection. Ne touche ni au schéma, ni aux index, ni au seed.
+# L'URL vient du secret MONGODB_URI_PROD de l'environnement GitHub « production ».
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      MONGODB_URI: ${{ secrets.MONGODB_URI_PROD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Vérifie que le secret est défini
+        run: test -n "$MONGODB_URI" || { echo "Secret MONGODB_URI_PROD manquant (environnement production)"; exit 1; }
+      - run: pnpm db:ping

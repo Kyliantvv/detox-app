@@ -3,13 +3,15 @@
 import { NextRequest } from "next/server";
 import { expect, vi } from "vitest";
 import { signToken } from "@/lib/server/auth";
+import { USERS } from "@/scripts/scenario";
 
 export type Handler<Ctx> = (request: NextRequest, ctx: Ctx) => Response | Promise<Response>;
 
 export type CallOptions = {
   // Par défaut : POST s'il y a un corps, GET sinon.
   method?: string;
-  // Id de l'utilisateur connecté : envoie un Bearer valide pour lui.
+  // Utilisateur connecté, compte de la maquette (« alex », « lina »…) ou id brut :
+  // envoie un Bearer valide pour lui.
   as?: string;
   // Bearer brut, pour tester les tokens invalides.
   token?: string;
@@ -29,7 +31,7 @@ export function apiRequest({ method, as, token, body, query, headers }: CallOpti
   const url = new URL("http://localhost/");
   for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
   const init = { method: method ?? (body === undefined ? "GET" : "POST"), headers: new Headers(headers) };
-  const bearer = token ?? (as ? signToken(as) : undefined);
+  const bearer = token ?? (as ? signToken(USERS[as as keyof typeof USERS] ?? as) : undefined);
   if (bearer) init.headers.set("authorization", `Bearer ${bearer}`);
   if (body === undefined) return new NextRequest(url, init);
   if (body instanceof FormData || typeof body === "string") return new NextRequest(url, { ...init, body });

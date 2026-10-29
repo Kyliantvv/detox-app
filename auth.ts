@@ -2,9 +2,8 @@
 // La session porte aussi le JWT de l'API (accessToken), envoyé en Bearer par le front.
 import NextAuth, { CredentialsSignin, type User } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { loginDemo, loginWithPassword } from "@/lib/server/accounts";
-import { signToken, verifyToken } from "@/lib/server/auth";
-import { db } from "@/lib/server/db";
+import { loginWithPassword } from "@/lib/server/accounts";
+import { findUser, signToken, verifyToken } from "@/lib/server/auth";
 import { ApiError } from "@/lib/server/http";
 
 declare module "next-auth" {
@@ -27,7 +26,7 @@ class InvalidLogin extends CredentialsSignin {
   code = "invalid_credentials";
 }
 
-function toUser(result: ReturnType<typeof loginDemo>): User {
+function toUser(result: Awaited<ReturnType<typeof loginWithPassword>>): User {
   return { ...result.user, accessToken: result.token };
 }
 
@@ -38,21 +37,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: { email: { type: "email" }, password: { type: "password" } },
-      authorize(credentials) {
+      async authorize(credentials) {
         const { email, password } = credentials;
         if (typeof email !== "string" || typeof password !== "string") throw new InvalidLogin();
         try {
-          return toUser(loginWithPassword(email, password));
+          return toUser(await loginWithPassword(email, password));
         } catch (error) {
           if (error instanceof ApiError) throw new InvalidLogin();
           throw error;
         }
       },
     }),
-    Credentials({ id: "demo", name: "Compte démo", credentials: {}, authorize: () => toUser(loginDemo()) }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token.sub = user.id;
         token.username = user.username;
@@ -60,7 +58,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       // La session glisse : on ré-émet le JWT de l'API s'il a expiré entre-temps.
       const accessToken = text(token.accessToken);
-      if (token.sub && !(accessToken && verifyToken(accessToken)) && db().users.has(token.sub)) {
+      if (token.sub && !(accessToken && verifyToken(accessToken)) && (await findUser(token.sub))) {
         token.accessToken = signToken(token.sub);
       }
       return token;

@@ -22,11 +22,11 @@ export const SKILLS: Record<Skill, number> = {
  * et une erreur de doublon (`isDuplicateKey`) si elle est déjà achetée sur
  * cette cible ; aucun point n'est débité dans ces deux cas.
  */
-export function buySkill(buyerId: Id, targetId: Id, skill: Skill) {
+export function buySkill(buyerId: Id, targetId: Id, skill: Skill, label?: string) {
   const data = { buyerId: toId(buyerId, "Utilisateur"), targetId: toId(targetId, "Cible"), skill, price: SKILLS[skill] };
   return inTransaction(undefined, async (tx) => {
     const purchase = await tx.skillPurchase.create({ data });
-    await spendPoints(data.buyerId, data.price, "skill_purchase", { refId: purchase.id, tx });
-    return purchase;
+    const event = await spendPoints(data.buyerId, data.price, "skill_purchase", { refId: purchase.id, label, tx });
+    return { purchase, event };
   });
 }

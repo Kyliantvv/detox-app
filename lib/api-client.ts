@@ -16,7 +16,7 @@ export class ApiClientError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
   if (typeof init.body === "string") headers.set("Content-Type", "application/json");

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { db, IDLE_GAP_MS, parisDay } from "@/lib/db";
 import { BIO_MAX } from "@/lib/validation";
-import { accountOf } from "@/lib/server/db";
 import { advanceTime, apiError, call, freezeTime } from "@/test/api";
+import { USERS, userRow } from "@/test/db";
 import { GET, PATCH } from "./route";
 
 describe("GET /api/me", () => {
@@ -10,7 +11,7 @@ describe("GET /api/me", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.user).toEqual({
-      id: "alex",
+      id: USERS.alex,
       username: "alex.detox",
       name: "Alex",
       email: "alex@detox.test",
@@ -23,7 +24,10 @@ describe("GET /api/me", () => {
       following: 4,
     });
     expect(res.body.stats).toMatchObject({ points: 2455, totalEarned: 2455, totalSpent: 0, streak: 5, serenity: 100 });
-    expect(res.body.stats.events).toHaveLength(2);
+    expect(res.body.stats.events.map((event: { label: string }) => event.label)).toEqual([
+      "Points des jours précédents",
+      "Cadeau de bienvenue",
+    ]);
   });
 
   it("n'expose pas le hash du mot de passe", async () => {
@@ -36,12 +40,22 @@ describe("GET /api/me", () => {
     freezeTime();
     await call(GET, { as: "alex" });
 
-    advanceTime(2 * 60_000);
+    advanceTime(IDLE_GAP_MS - 1000);
     await call(GET, { as: "alex" });
     advanceTime(30 * 60_000);
     const res = await call(GET, { as: "alex" });
 
-    expect(res.body.stats.timeSpentMs).toBe(2 * 60_000);
+    expect(res.body.stats.timeSpentMs).toBe(IDLE_GAP_MS - 1000);
+  });
+
+  it("calcule les stats depuis le journal de points", async () => {
+    await db.pointEvent.create({
+      data: { userId: USERS.alex, amount: -300, type: "shop_purchase", label: "Achat", day: parisDay() },
+    });
+
+    const res = await call(GET, { as: "alex" });
+
+    expect(res.body.stats).toMatchObject({ totalSpent: 300, bestGain: 1955, dosesGiven: 0, orders: 0, friendsSpied: 0 });
   });
 });
 
@@ -51,7 +65,7 @@ describe("PATCH /api/me", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      user: { id: "alex", email: "alex@detox.test", username: "alex.detox", bio: "Plus que 3 scrolls." },
+      user: { id: USERS.alex, email: "alex@detox.test", username: "alex.detox", bio: "Plus que 3 scrolls." },
     });
     expect((await call(GET, { as: "alex" })).body.user.bio).toBe("Plus que 3 scrolls.");
   });
@@ -76,6 +90,6 @@ describe("PATCH /api/me", () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual(apiError("INVALID_INPUT", "Champ(s) inconnu(s) : points."));
-    expect(accountOf("alex").points).toBe(2455);
+    expect((await userRow("alex")).points).toBe(2455);
   });
 });
