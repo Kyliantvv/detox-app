@@ -16,7 +16,7 @@ Détox réunit fil, stories, reels, messages, recherche et profil, et fait de ch
 - **Sécurité** : scrypt, JWT signé (`JWT_SECRET` en variable d'environnement), middleware Bearer
 - **Qualité** : ESLint, Vitest + Supertest ; description OpenAPI sur `/api/openapi`, Swagger UI sur `/api/docs`
 - **Commits** : [Conventional Commits](https://www.conventionalcommits.org/fr/) (`feat:`, `fix:`, `test:`…), vérifiés par commitlint (hook `commit-msg` + CI)
-- **Lancement** : une seule app Next.js, voir ci-dessous
+- **Lancement** : une seule app Next.js, déployée sur Vercel ; en local, voir ci-dessous
 
 **Pourquoi Vitest plutôt que Jest**
 
