@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 import { useApi } from "@/lib/api-client";
 import { POINTS } from "@/lib/game";
 import { useApplyGains } from "@/lib/gains";
@@ -10,6 +10,7 @@ import type { PointsResponse, PostView } from "@/lib/types";
 import Artwork from "./artwork";
 import Avatar from "./avatar";
 import { BoltIcon, BookmarkIcon, CommentIcon, HeartIcon, MoreIcon, SendIcon } from "./icons";
+import ShareSheet from "./share-sheet";
 
 const formatCount = (n: number) => n.toLocaleString("fr-FR");
 
@@ -61,6 +62,8 @@ export default function PostCard({ post }: { post: PostView }) {
   const [comments, setComments] = useState(post.comments);
   const [commenting, setCommenting] = useState(false);
   const [draft, setDraft] = useState("");
+  const [sharing, setSharing] = useState(false);
+  const closeShare = useCallback(() => setSharing(false), []);
 
   const username = post.author?.username ?? "compte supprimé";
   const profileHref = !post.author || post.author.id === session?.user.id ? "/profil" : `/u/${post.author.username}`;
@@ -140,9 +143,9 @@ export default function PostCard({ post }: { post: PostView }) {
         >
           <CommentIcon size={25} />
         </button>
-        <Link href="/messages" aria-label="Envoyer en message">
+        <button type="button" onClick={() => setSharing(true)} aria-haspopup="dialog" aria-label="Partager">
           <SendIcon size={25} />
-        </Link>
+        </button>
         <button
           type="button"
           onClick={() => void toggleSave()}
@@ -184,6 +187,7 @@ export default function PostCard({ post }: { post: PostView }) {
           </form>
         )}
       </div>
+      {sharing && <ShareSheet postId={post.id} onClose={closeShare} />}
     </article>
   );
 }
