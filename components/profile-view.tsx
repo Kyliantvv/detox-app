@@ -249,9 +249,9 @@ function Profile({
         )}
         <div className="mt-0.5 grid grid-cols-3 gap-0.5">
           {shown.map((post) => (
-            <div key={post.id} className="aspect-square overflow-hidden">
+            <Link key={post.id} href={`/p/${post.id}`} aria-label={post.caption || "Voir le post"} className="aspect-square overflow-hidden">
               <PostMedia post={post} />
-            </div>
+            </Link>
           ))}
         </div>
         {isMe && tab === "saved" && saved && shown.length === 0 && (

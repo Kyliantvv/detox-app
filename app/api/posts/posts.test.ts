@@ -9,6 +9,7 @@ import { POSTS, USERS, postKeys, userRow } from "@/test/db";
 import * as circle from "../feed/circle/route";
 import * as comments from "./[id]/comments/route";
 import * as likes from "./[id]/likes/route";
+import * as post from "./[id]/route";
 import * as saves from "./[id]/saves/route";
 import * as posts from "./route";
 
@@ -174,6 +175,33 @@ describe("POST /api/posts", () => {
     expect(res.body).toEqual(apiError("INVALID_INPUT", message));
     expect(await db.post.count()).toBe(before);
     expect((await userRow("alex")).points).toBe(2455);
+  });
+});
+
+describe("GET /api/posts/[id]", () => {
+  it("renvoie le post avec son auteur, ses commentaires et l'état du compte connecté", async () => {
+    await call(likes.POST, { as: "alex", params: { id: POSTS.c1 } });
+
+    const res = await call(post.GET, { as: "alex", params: { id: POSTS.c1 } });
+
+    expect(res.status).toBe(200);
+    expect(res.body.post).toMatchObject({
+      id: POSTS.c1,
+      author: { username: "lina.m" },
+      dosedByMe: true,
+      savedByMe: false,
+      comments: [{ author: "karim.zen", text: "Magnifique, profite bien !" }],
+    });
+  });
+
+  it("répond 404 hors du cercle proche, pour un post inconnu, et 400 pour un id mal formé", async () => {
+    await db.post.update({ where: { id: POSTS.c2 }, data: { visibility: "closeFriends" } });
+    await db.closeFriend.create({ data: { ownerId: USERS.karim, friendId: USERS.lina } });
+
+    expect((await call(post.GET, { as: "alex", params: { id: POSTS.c2 } })).status).toBe(404);
+    expect((await call(post.GET, { as: "lina", params: { id: POSTS.c2 } })).status).toBe(200);
+    expect((await call(post.GET, { as: "alex", params: { id: "0".repeat(24) } })).status).toBe(404);
+    expect((await call(post.GET, { as: "alex", params: { id: "abc" } })).status).toBe(400);
   });
 });
 
