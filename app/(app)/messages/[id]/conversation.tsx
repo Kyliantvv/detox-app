@@ -4,12 +4,40 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Avatar from "@/components/avatar";
 import { ChevronLeftIcon, SendIcon } from "@/components/icons";
+import { PostMedia } from "@/components/post-card";
 import { useApi, useApiData } from "@/lib/api-client";
-import type { ChatMessage, PublicUser } from "@/lib/types";
+import type { ChatMessage, PostView, PublicUser } from "@/lib/types";
 
 const POLL_MS = 3000;
-// Lien de post partagé depuis la fenêtre « Partager » (components/share-sheet.tsx).
+// Lien de post partagé depuis la fenêtre « Partager » (components/share-sheet.tsx), affiché en aperçu.
 const SHARED_POST = /https?:\/\/\S+\/p\/([0-9a-f]{24})\b/i;
+
+// Aperçu d'un post partagé : média, auteur et légende, ouvre la page du post.
+function SharedPost({ id }: { id: string }) {
+  const { data, error } = useApiData<{ post: PostView }>(`/api/posts/${id}`);
+  if (error) {
+    return <span className="mt-1 block rounded-xl bg-ink px-3 py-2 text-sm text-muted">Post indisponible.</span>;
+  }
+  if (!data) return <span className="mt-1 block aspect-square w-56 animate-pulse rounded-xl bg-ink" aria-label="Chargement du post" />;
+  const { post } = data;
+  const username = post.author?.username ?? "compte supprimé";
+  return (
+    <Link
+      href={`/p/${post.id}`}
+      aria-label={`Post de ${username}`}
+      className="mt-1 block w-56 overflow-hidden rounded-xl border border-line bg-ink text-fg"
+    >
+      <span className="flex items-center gap-2 px-3 py-2 text-sm font-semibold">
+        <Avatar name={post.author?.name ?? username} seed={post.author?.id ?? username} size={24} />
+        <span className="truncate">{username}</span>
+      </span>
+      <span className="block aspect-square">
+        <PostMedia post={post} />
+      </span>
+      {post.caption && <span className="line-clamp-2 block px-3 py-2 text-sm">{post.caption}</span>}
+    </Link>
+  );
+}
 
 function MessageText({ text }: { text: string }) {
   const match = SHARED_POST.exec(text);
@@ -19,10 +47,8 @@ function MessageText({ text }: { text: string }) {
   return (
     <>
       {before && <span className="block">{before}</span>}
-      <Link href={`/p/${match[1]}`} className="font-semibold underline underline-offset-2">
-        Voir le post
-      </Link>
-      {after && <span className="block">{after}</span>}
+      <SharedPost id={match[1]} />
+      {after && <span className="mt-1 block">{after}</span>}
     </>
   );
 }
