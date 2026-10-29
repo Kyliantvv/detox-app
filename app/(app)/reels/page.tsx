@@ -6,6 +6,7 @@ import Avatar from "@/components/avatar";
 import CommentsSheet from "@/components/comments-sheet";
 import { CommentIcon, HeartIcon, SendIcon } from "@/components/icons";
 import { PostMedia, useDose } from "@/components/post-card";
+import ShareSheet from "@/components/share-sheet";
 import { PointsPill } from "@/components/top-bar";
 import { useApiData, useMe } from "@/lib/api-client";
 import type { PostView } from "@/lib/types";
@@ -37,6 +38,8 @@ function Reel({ reel }: { reel: PostView }) {
   const [commenting, setCommenting] = useState(false);
   // Stable : Dialog replace le focus à chaque nouvelle fonction de fermeture.
   const closeComments = useCallback(() => setCommenting(false), []);
+  const [sharing, setSharing] = useState(false);
+  const closeShare = useCallback(() => setSharing(false), []);
   const username = reel.author?.username ?? "compte supprimé";
 
   return (
@@ -77,12 +80,19 @@ function Reel({ reel }: { reel: PostView }) {
               <CommentIcon size={28} />
               {commentCount}
             </button>
-            <Link href="/messages" aria-label="Envoyer" className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setSharing(true)}
+              aria-haspopup="dialog"
+              aria-label="Partager"
+              className="flex flex-col items-center gap-1"
+            >
               <SendIcon size={28} />
-            </Link>
+            </button>
           </div>
         </div>
       </div>
+      {sharing && <ShareSheet postId={reel.id} onClose={closeShare} />}
       {commenting && (
         <CommentsSheet
           postId={reel.id}

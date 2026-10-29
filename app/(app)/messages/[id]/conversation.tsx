@@ -8,6 +8,24 @@ import { useApi, useApiData } from "@/lib/api-client";
 import type { ChatMessage, PublicUser } from "@/lib/types";
 
 const POLL_MS = 3000;
+// Lien de post partagé depuis la fenêtre « Partager » (components/share-sheet.tsx).
+const SHARED_POST = /https?:\/\/\S+\/p\/([0-9a-f]{24})\b/i;
+
+function MessageText({ text }: { text: string }) {
+  const match = SHARED_POST.exec(text);
+  if (!match) return text;
+  const before = text.slice(0, match.index).trim();
+  const after = text.slice(match.index + match[0].length).trim();
+  return (
+    <>
+      {before && <span className="block">{before}</span>}
+      <Link href={`/p/${match[1]}`} className="font-semibold underline underline-offset-2">
+        Voir le post
+      </Link>
+      {after && <span className="block">{after}</span>}
+    </>
+  );
+}
 
 // Fil de discussion lu en polling (GET toutes les 3 s), envoi par POST.
 export default function Conversation({ userId }: { userId: string }) {
@@ -75,7 +93,7 @@ export default function Conversation({ userId }: { userId: string }) {
                 : "self-start rounded-bl-md border border-line bg-panel"
             }`}
           >
-            {message.text}
+            <MessageText text={message.text} />
           </li>
         ))}
       </ol>
