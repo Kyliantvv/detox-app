@@ -83,12 +83,14 @@ export default function SearchPage() {
 
           <div className="-mx-4 grid grid-cols-3 gap-0.5">
             {tiles.map((tile, index) => (
-              <div
+              <Link
                 key={tile.id}
+                href={`/p/${tile.id}`}
+                aria-label="Voir le post"
                 className={index === 0 ? "col-span-2 row-span-2 aspect-square" : "aspect-square"}
               >
                 <Artwork variant={tile.art} />
-              </div>
+              </Link>
             ))}
           </div>
         </>
